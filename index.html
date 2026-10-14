@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ko" data-theme="cream">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>말씀암송 선포구절</title>
+<meta name="theme-color" content="#F7F4EC" id="themeColor">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="말씀암송">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="app.css">
+<script>
+  // 저장된 바탕을 화면이 그려지기 전에 적용 (깜빡임 방지)
+  (function () {
+    try {
+      var t = localStorage.getItem('amsong.theme') || 'cream';
+      if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'cream';
+      document.documentElement.setAttribute('data-theme', t);
+      var s = localStorage.getItem('amsong.size');
+      if (s) document.documentElement.style.setProperty('--fs-scale', s);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<div id="app" aria-live="polite">
+  <div class="boot"><span class="boot-mark"></span><span>말씀암송 선포구절</span></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

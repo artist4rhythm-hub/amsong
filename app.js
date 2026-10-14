@@ -1,0 +1,788 @@
+// 말씀암송 선포구절 — 화면과 동작
+import * as B from "./backend.js";
+
+const $app = document.getElementById("app");
+const VERSION = "1.0.0";
+const VOLS = ["1", "2", "3"];
+const VOL_NAME = { "1": "주니어 1", "2": "주니어 2", "3": "주니어 3 · 성벽기도" };
+const VOL_COVER = {
+  "1": "linear-gradient(180deg,#E6F0EB 0 48%,#BFD6CB 48% 62%,#86B09E 62% 76%,#4A876F 76% 88%,#1E3932 88%)",
+  "2": "linear-gradient(180deg,#DCE8E3 0 44%,#B9CEC5 44% 60%,#7FA898 60% 74%,#006241 74% 88%,#16302A 88%)",
+  "3": "linear-gradient(180deg,#E3EEE9 0 40%,#C3D8CE 40% 56%,#8DB4A3 56% 70%,#4F8A73 70% 84%,#1E3932 84%)"
+};
+const MODES = [
+  { id: "read", label: "읽기" },
+  { id: "hide", label: "가리기" },
+  { id: "say", label: "선포" },
+  { id: "rec", label: "녹음 채점" }
+];
+const MARKS = ["miss", "skip", "hes"];
+const MARK_LABEL = { miss: "틀림", skip: "빠뜨림", hes: "머뭇거림" };
+
+// ───────── 상태
+const S = {
+  user: null, allow: null, admin: false, userDoc: {},
+  books: {}, stages: {}, marks: {}, weak: null,
+  view: {}, cleanup: null
+};
+
+// ───────── 작은 도구
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const refHtml = (r) => esc(r).replace(/Ⓐ/g, '<span class="jang" title="전장">Ⓐ</span>');
+const pref = (k, d) => { try { return localStorage.getItem("amsong." + k) ?? d; } catch (e) { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem("amsong." + k, v); } catch (e) {} };
+const ICON = {
+  back: '<path d="M15 5l-7 7 7 7"/>', next: '<path d="M9 5l7 7-7 7"/>', menu: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  check: '<path d="M5 12l4 4 10-10"/>', gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6L19 19M5 19l1.4-1.4M17.6 6.4L19 5"/>',
+  mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
+  home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'
+};
+const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
+
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("on"), 2200);
+}
+
+function applyTheme() {
+  let t = pref("theme", "cream");
+  if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "cream";
+  document.documentElement.setAttribute("data-theme", t);
+  document.getElementById("themeColor").setAttribute("content", t === "dark" ? "#132A24" : "#F7F4EC");
+  document.documentElement.style.setProperty("--fs-scale", pref("size", "1"));
+}
+const curTheme = () => document.documentElement.getAttribute("data-theme");
+function toggleTheme() {
+  setPref("theme", curTheme() === "dark" ? "cream" : "dark");
+  applyTheme(); render();
+}
+
+// ───────── 데이터
+async function book(vol) {
+  if (!S.books[vol]) S.books[vol] = await B.getBook(vol);
+  return S.books[vol];
+}
+async function stage(vol, num) {
+  const k = vol + "_" + num;
+  if (!S.stages[k]) S.stages[k] = await B.getStage(vol, num);
+  return S.stages[k];
+}
+async function marksOf(pid) {
+  if (!(pid in S.marks)) {
+    try { S.marks[pid] = await B.getMarks(S.user.uid, pid); } catch (e) { S.marks[pid] = null; }
+  }
+  return S.marks[pid];
+}
+const canVol = (v) => S.admin || (S.allow && (S.allow.vols || []).includes(v));
+const memorized = (pid) => !!(S.userDoc.memorized && S.userDoc.memorized[pid]);
+const memCount = (vol) => Object.keys(S.userDoc.memorized || {}).filter((k) => k.startsWith("v" + vol + "s")).length;
+const memCountStage = (vol, num) => Object.keys(S.userDoc.memorized || {}).filter((k) => k.startsWith(`v${vol}s${num}p`)).length;
+
+// 단어 단위로 나누기 (줄 바꿈은 책 그대로)
+const words = (line) => line.split(" ").filter((w) => w.length);
+const weakSet = (m) => {
+  const out = new Set();
+  if (m && m.words) for (const [k, v] of Object.entries(m.words)) if ((v.n || 0) >= 2) out.add(k);
+  return out;
+};
+
+// ───────── 길 찾기
+function parseHash() {
+  const h = location.hash.replace(/^#\/?/, "");
+  const [path, qs] = h.split("?");
+  const parts = path.split("/").filter(Boolean);
+  const q = Object.fromEntries(new URLSearchParams(qs || ""));
+  return { parts, q };
+}
+const go = (h) => { if (location.hash === h) render(); else location.hash = h; };
+window.addEventListener("hashchange", () => render());
+
+// ───────── 머리줄
+function topBar(title, back, extra = "") {
+  return `<header class="top">
+    ${back ? `<a class="iconbtn" href="${back}" aria-label="뒤로">${icon("back")}</a>` : ""}
+    <div class="t">${title}</div>
+    ${extra}
+    <button class="iconbtn" type="button" data-act="theme" aria-label="${curTheme() === "dark" ? "밝은 바탕으로" : "어두운 바탕으로"}">${icon(curTheme() === "dark" ? "sun" : "moon")}</button>
+  </header>`;
+}
+
+// ───────── 화면: 로그인 · 대기
+function viewLogin() {
+  $app.innerHTML = `<main class="gate">
+    <span class="kicker">다니엘 아마츠</span>
+    <h1>말씀암송<br>선포구절</h1>
+    <p>등록된 구글 계정으로 들어와 주세요.</p>
+    <div class="actions">
+      <button class="btn google" type="button" data-act="signin">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A24 24 0 0 0 0 24c0 3.9.9 7.5 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.7l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>
+        구글 계정으로 들어가기
+      </button>
+    </div>
+  </main>`;
+}
+
+function viewPending() {
+  $app.innerHTML = `<main class="gate">
+    <span class="kicker">승인 대기</span>
+    <h1>아직 열람 허용이<br>되지 않았어요</h1>
+    <p>아래 메일 주소를 관리자에게 알려 주세요. 등록되면 바로 볼 수 있어요.</p>
+    <div class="mail">${esc(S.user.email)}</div>
+    <div class="actions">
+      <button class="btn" type="button" data-act="recheck">다시 확인</button>
+      <button class="btn ghost" type="button" data-act="signout">다른 계정으로 들어가기</button>
+    </div>
+  </main>`;
+}
+
+// ───────── 화면: 서재
+async function viewLibrary() {
+  const last = S.userDoc.last;
+  let cont = "";
+  if (last && last.vol && canVol(last.vol)) {
+    cont = `<a class="cont" href="#/p/${last.vol}/${last.num}/${last.no}">
+      <small>이어서 외우기</small><strong>${refHtml(last.ref || "")}</strong>
+      <span>${esc(VOL_NAME[last.vol])} · ${esc(last.label || "")}</span></a>`;
+  }
+  const cards = [];
+  for (const v of VOLS) {
+    const ok = canVol(v);
+    let b = null;
+    if (ok) { try { b = await book(v); } catch (e) { b = null; } }
+    const tot = b ? b.total : 0, done = ok ? memCount(v) : 0;
+    const pct = tot ? Math.round((done / tot) * 100) : 0;
+    const sub = !ok ? "열람 권한이 없어요" : !b ? "본문 준비 중" : `${esc(b.range)} · 본문 ${tot}개 · 외운 본문 ${done}`;
+    cards.push(`<a class="book${ok && b ? "" : " locked"}" href="${ok && b ? "#/b/" + v : "#/"}" ${ok && b ? "" : 'aria-disabled="true"'}>
+      <span class="cover" data-vol="${v}" style="background:${VOL_COVER[v]}"></span>
+      <span class="info"><b>${esc(VOL_NAME[v])}</b><span>${sub}</span>
+      ${ok && b ? `<span class="bar"><i style="width:${pct}%"></i></span>` : ""}</span></a>`);
+  }
+  if (S.weak === null) { try { S.weak = await B.weakList(S.user.uid, 6); } catch (e) { S.weak = []; } }
+  const weak = S.weak.length ? `<div class="sec-h">자주 틀리는 본문</div><div class="weak-list">${S.weak.map((w) =>
+    `<a href="#/p/${w.vol}/${w.num}/${w.no}?m=hide"><b>${refHtml(w.ref)}</b><span>${w.vol}권 ${w.num}단계 · 표시 ${w.total}곳</span></a>`).join("")}</div>` : "";
+  $app.innerHTML = topBar("<b>말씀암송 선포구절</b>", "",
+    (S.admin ? `<a class="iconbtn" href="#/admin" aria-label="열람 허용 관리">${icon("users")}</a>` : "") +
+    `<a class="iconbtn" href="#/settings" aria-label="설정">${icon("gear")}</a>`) +
+    `<main class="wrap">
+      <div class="hero"><span class="kicker">다니엘 아마츠</span><h1>어떤 말씀을 외울까요?</h1></div>
+      ${cont}
+      <div class="sec-h">내 책</div>
+      <div class="books">${cards.join("")}</div>
+      ${weak}
+      <p class="muted" style="margin-top:28px">${esc(S.user.email)} · <a href="#/settings">설정</a></p>
+    </main>`;
+}
+
+// ───────── 화면: 책 (단계 목록)
+async function viewBook(vol) {
+  if (!canVol(vol)) return go("#/");
+  const b = await book(vol);
+  if (!b) return viewEmpty("#/");
+  const cards = b.stages.map((s) => {
+    const done = memCountStage(vol, s.num);
+    return `<a class="stage-card" href="#/s/${vol}/${s.num}"><b>${esc(s.label)}</b>
+      <span>본문 ${s.count}개 · ${s.verses}절${s.groups && s.groups.length ? " · " + esc(s.groups.join(" · ")) : ""}</span>
+      <em>외운 본문 ${done} / ${s.count}</em></a>`;
+  }).join("");
+  $app.innerHTML = topBar(`<b>${esc(VOL_NAME[vol])}</b>`, "#/") + `<main class="wrap">
+    <div class="page-h"><span class="kicker">말씀암송 선포구절</span><h1>${esc(b.title)}</h1>
+    <div class="meta">${esc(b.range)} · 본문 ${b.total}개 · 외운 본문 ${memCount(vol)}</div></div>
+    <div class="stage-cards">${cards}</div>
+    <div class="sec-h">함께 읽기</div>
+    <div class="extras">
+      <a class="row-link" href="#/x/${vol}/prayer"><b>암송 기도문</b><span>암송 전에</span></a>
+      <a class="row-link" href="#/x/${vol}/slogans"><b>암송 선포 개념 구호</b><span>말씀암송은</span></a>
+      ${b.names ? `<a class="row-link" href="#/x/${vol}/names"><b>하나님의 이름</b><span>고백 기도</span></a>` : ""}
+    </div></main>`;
+}
+
+function viewEmpty(back) {
+  $app.innerHTML = topBar("", back) + `<main class="wrap"><div class="gate" style="min-height:50vh">
+    <h1 style="font-size:24px">본문이 아직 없어요</h1>
+    <p>${S.admin ? "관리 화면에서 본문 파일을 올려 주세요." : "관리자가 본문을 올리면 볼 수 있어요."}</p>
+    ${S.admin ? '<div class="actions"><a class="btn" href="#/admin">관리 화면으로</a></div>' : ""}</div></main>`;
+}
+
+// ───────── 단계 구절표 (책과 같은 녹색 상자 · 소주제)
+function stageList(vol, st, curNo) {
+  let out = "", lastg = null, lastt = null;
+  for (const p of st.passages) {
+    if (p.group && p.group !== lastg) { out += `<span class="g-head">${esc(p.group)}</span>`; lastg = p.group; lastt = null; }
+    if (p.topic && p.topic !== lastt) { out += `<span class="t-head">${esc(p.topic)}</span>`; lastt = p.topic; }
+    const on = memorized(p.id), cur = p.no === curNo;
+    out += `<a class="srow" href="#/p/${vol}/${st.num}/${p.no}" ${cur ? 'aria-current="true"' : ""}>
+      <span class="no">${p.no}</span><span class="ref">${refHtml(p.ref)}${p.note ? `<small>${esc(p.note)}</small>` : ""}</span>
+      <span class="nv">${p.verses.length}절</span>
+      <span class="ck${on ? " on" : ""}" aria-label="${on ? "외움" : "아직"}">${on ? icon("check") : ""}</span></a>`;
+  }
+  (st.lists || []).forEach((l, k) => {
+    out += `<span class="t-head">${esc(l.title)}</span><a class="srow" href="#/l/${vol}/${st.num}/${k + 1}">
+      <span class="no"></span><span class="ref">회개 기도 ${l.items.length}가지</span><span class="nv"></span><span></span></a>`;
+  });
+  return `<div class="slist">${out}</div>`;
+}
+
+function stageHead(vol, st, b) {
+  const nverse = st.passages.reduce((a, p) => a + p.verses.length, 0);
+  return `<div class="page-h"><span class="kicker">${st.lang === "en" ? "STEP" : "단계 구절"}</span><h1>${esc(st.label)}</h1>
+    <div class="meta">${esc(VOL_NAME[vol])} · 본문 ${st.passages.length}개 · ${nverse}절 · 외운 본문 ${memCountStage(vol, st.num)}</div></div>`;
+}
+
+const wide = () => matchMedia("(min-width: 1000px)").matches;
+const xwide = () => matchMedia("(min-width: 1360px)").matches;
+
+async function viewStage(vol, num) {
+  if (!canVol(vol)) return go("#/");
+  const [b, st] = await Promise.all([book(vol), stage(vol, num)]);
+  if (!b || !st) return viewEmpty("#/b/" + vol);
+  if (wide()) {
+    // 패드 가로 · 컴퓨터: 왼쪽 구절표 + 오른쪽 안내
+    const first = st.passages.find((p) => !memorized(p.id)) || st.passages[0];
+    $app.innerHTML = `<div class="split">${aside(vol, st, null)}<div class="split-main">
+      ${topBar(`<b>${esc(st.label)}</b>`, "#/b/" + vol)}
+      <div class="sheet empty"><div class="crumb">${esc(VOL_NAME[vol])}</div>
+        <div class="ptitle">${esc(st.label)}</div>
+        <p class="muted" style="margin-top:16px">왼쪽 구절표에서 본문을 고르세요.</p>
+        <div class="tools"><a class="btn" href="#/p/${vol}/${num}/${first.no}">${refHtml(first.ref)}부터 외우기</a></div>
+      </div></div></div>`;
+    return;
+  }
+  $app.innerHTML = topBar(`<b>${esc(st.label)}</b>`, "#/b/" + vol) +
+    `<main class="wrap">${stageHead(vol, st, b)}${stageList(vol, st, null)}</main>`;
+}
+
+function aside(vol, st, curNo) {
+  return `<aside class="split-aside" aria-label="단계 구절표">
+    <div style="display:flex;align-items:center;margin-left:-12px"><a class="iconbtn" href="#/b/${vol}" aria-label="단계 목록">${icon("back")}</a>
+    <span class="muted">${esc(VOL_NAME[vol])}</span></div>
+    ${stageHead(vol, st)}${stageList(vol, st, curNo)}</aside>`;
+}
+
+// ───────── 본문 화면
+function neighbors(b, st, no) {
+  const i = st.passages.findIndex((p) => p.no === no);
+  const prev = i > 0 ? { vol: st.vol, num: st.num, no: st.passages[i - 1].no, ref: st.passages[i - 1].ref } : null;
+  let next = i < st.passages.length - 1 ? { vol: st.vol, num: st.num, no: st.passages[i + 1].no, ref: st.passages[i + 1].ref } : null;
+  if (!next) {
+    const si = b.stages.findIndex((s) => s.num === st.num);
+    const ns = b.stages[si + 1];
+    if (ns) next = { vol: st.vol, num: ns.num, no: 1, ref: ns.label + " 시작" };
+  }
+  return { prev, next };
+}
+
+function crumbOf(st, p) {
+  return [VOL_NAME[st.vol], st.label, p.group].filter(Boolean).map(esc).join(" · ");
+}
+
+function headHtml(st, p) {
+  return `<div class="crumb">${crumbOf(st, p)}</div>
+    ${p.topic ? `<span class="band">${esc(p.topic)}</span>` : ""}
+    <h1 class="ptitle">${refHtml(p.ref)}${p.note ? `<span class="pnote">${esc(p.note)}</span>` : ""}</h1>`;
+}
+
+function afterHtml(p) {
+  return p.after.map((a) => a.kind === "decl"
+    ? `<div class="decl">${a.lines.map(esc).join("<br>")}</div>`
+    : `<div class="pnote-box">${a.lines.map(esc).join("<br>")}</div>`).join("");
+}
+
+function versesRead(p, weak) {
+  return `<div class="verses">${p.verses.map((v, vi) => `<div class="verse"><span class="vn">${v.n ?? ""}</span><div class="lines">
+    ${v.lines.map((l, li) => `<span class="ln">${words(l).map((w, wi) => {
+      const k = `${vi}-${li}-${wi}`;
+      return weak.has(k) ? `<span class="w weak">${esc(w)}</span>` : esc(w);
+    }).join(" ")}</span>`).join("")}</div></div>`).join("")}</div>
+    <div class="closing">— ${refHtml(p.ref)}</div>`;
+}
+
+function maskWord(w, how) {
+  if (how === "all") return `<span class="blk" style="width:${Math.max(1, w.length) * 0.92}em"></span>`;
+  return esc(w[0]) + `<span class="mk">${"○".repeat(Math.max(0, w.length - 1))}</span>`;
+}
+
+function versesHide(p, weak, v) {
+  const how = v.hide || "first";
+  return `<div class="verses">${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
+    ${vs.lines.map((l, li) => {
+      const key = `${vi}-${li}`;
+      const open = v.open.has(key) || v.openAll;
+      if (open) return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 다시 가리기">${esc(l)}</span>`;
+      const ws = words(l).map((w, wi) => {
+        const k = `${vi}-${li}-${wi}`;
+        if (how === "weak") return weak.has(k) ? maskWord(w, "first") : esc(w);
+        return maskWord(w, how);
+      }).join(" ");
+      return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 열기">${ws}</span>`;
+    }).join("")}</div></div>`).join("")}</div>`;
+}
+
+function versesSay(p, v) {
+  // 한 호흡(책의 한 줄)씩
+  const flat = [];
+  p.verses.forEach((vs, vi) => vs.lines.forEach((l, li) => flat.push({ vi, li, n: vs.n, l })));
+  const cur = Math.min(v.say || 0, flat.length - 1);
+  let out = "", lastV = null;
+  flat.forEach((x, i) => {
+    if (i > cur) return;
+    if (x.vi !== lastV) { out += `<span class="vtag">${x.n ?? ""}</span>`; lastV = x.vi; }
+    out += `<span class="ln${i === cur ? " now" : ""}">${esc(x.l)}</span>`;
+  });
+  return { html: `<div class="breath" aria-live="polite">${out}</div>`, cur, total: flat.length };
+}
+
+function versesGrade(p, marks) {
+  return `<div class="verses grade">${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
+    ${vs.lines.map((l, li) => `<span class="ln">${words(l).map((w, wi) => {
+      const k = `${vi}-${li}-${wi}`, m = marks[k];
+      return `<button type="button" class="tok${m ? " m-" + m : ""}" data-tok="${k}" aria-label="${esc(w)}${m ? " · " + MARK_LABEL[m] : ""}">${esc(w)}</button>`;
+    }).join(" ")}</span>`).join("")}</div></div>`).join("")}</div>`;
+}
+
+async function viewPassage(vol, num, no, q) {
+  if (!canVol(vol)) return go("#/");
+  const [b, st] = await Promise.all([book(vol), stage(vol, num)]);
+  if (!b || !st) return viewEmpty("#/b/" + vol);
+  const p = st.passages.find((x) => x.no === no) || st.passages[0];
+  const mode = MODES.some((m) => m.id === q.m) ? q.m : pref("mode", "read");
+  const key = `${vol}/${num}/${p.no}/${mode}`;
+  if (S.view.key !== key) {
+    if (S.cleanup) { S.cleanup(); S.cleanup = null; }
+    S.view = { key, open: new Set(), openAll: false, hide: S.view.hide || "first", say: 0, rec: "idle", marks: {}, result: null };
+  }
+  const v = S.view;
+  const m = await marksOf(p.id);
+  const weak = weakSet(m);
+  const nb = neighbors(b, st, p.no);
+
+  // 지난 위치 저장
+  const last = { vol, num, no: p.no, ref: p.ref, label: st.label };
+  const lk = JSON.stringify(last);
+  if (S._lastKey !== lk) {
+    S._lastKey = lk; S.userDoc.last = last;
+    B.setLast(S.user.uid, last).catch(() => {});
+  }
+
+  let body = "", side = "";
+  if (mode === "read") {
+    body = versesRead(p, weak);
+    side = afterHtml(p);
+  } else if (mode === "hide") {
+    body = `<div class="tools" role="group" aria-label="가리는 방법">
+      ${[["first", "첫 글자"], ["all", "모두 가리기"], ["weak", "자주 틀린 곳만"]].map(([id, lb]) =>
+        `<button class="chip" type="button" data-hide="${id}" aria-pressed="${v.hide === id}">${lb}</button>`).join("")}
+      <button class="chip" type="button" data-act="openall" aria-pressed="${v.openAll}">${v.openAll ? "다시 가리기" : "모두 열기"}</button>
+    </div>${versesHide(p, weak, v)}
+    <p class="hint">줄을 누르면 그 줄이 열리고, 다시 누르면 가려져요.${v.hide === "weak" && !weak.size ? " 아직 자주 틀린 곳 기록이 없어요. 녹음 채점을 해 보세요." : ""}</p>`;
+    side = afterHtml(p);
+  } else if (mode === "say") {
+    const r = versesSay(p, v);
+    body = r.html + `<div class="breath-ctrl">
+      <button class="btn ghost" type="button" data-say="-1" ${r.cur <= 0 ? "disabled" : ""}>이전 줄</button>
+      <button class="btn" type="button" data-say="1" ${r.cur >= r.total - 1 ? "disabled" : ""}>다음 줄</button></div>
+      <div class="tools"><button class="chip" type="button" data-say="0">처음부터</button><span class="hint" style="margin:0;align-self:center">${r.cur + 1} / ${r.total} 호흡</span></div>`;
+    side = r.cur >= r.total - 1 ? afterHtml(p) : "";
+  } else {
+    body = recBody(p, v, m);
+  }
+
+  const statLine = m && m.sessions ? `<div class="side-h">나의 녹음 채점</div><p class="muted" style="margin:0">채점 ${m.sessions}번 · 지난번 표시 ${m.lastCount ?? 0}곳 · 누적 ${m.total ?? 0}곳</p>` : "";
+  const isWide = wide();
+  const two = xwide() && mode !== "rec" && !!(side || statLine);
+  const sheet = `<article class="sheet${two ? " two" : ""}">
+    <div class="main-col">${headHtml(st, p)}${body}${two ? "" : side}</div>
+    ${two ? `<div class="side">${side ? `<div class="side-h">선포 · 안내</div>${side}` : ""}${statLine}</div>` : ""}
+  </article>`;
+  const modes = `<nav class="modes" aria-label="보기 방식">${MODES.map((x) =>
+    `<a href="#/p/${vol}/${num}/${p.no}?m=${x.id}" ${x.id === mode ? 'aria-current="page"' : ""}>${x.id === "rec" ? '<span class="dot"></span>' : ""}${x.label}</a>`).join("")}</nav>`;
+  const on = memorized(p.id);
+  const pager = `<nav class="pager" aria-label="본문 이동">
+    ${nb.prev ? `<a href="#/p/${nb.prev.vol}/${nb.prev.num}/${nb.prev.no}?m=${mode}" aria-label="이전 본문 ${esc(nb.prev.ref)}">${icon("back")}<span>${refHtml(nb.prev.ref)}</span></a>` : '<span class="ghostlink"></span>'}
+    <button class="memo-btn" type="button" data-act="memo" aria-pressed="${on}">${icon("check")}${on ? "외웠어요" : "외웠어요 표시"}</button>
+    ${nb.next ? `<a href="#/p/${nb.next.vol}/${nb.next.num}/${nb.next.no}?m=${mode}" aria-label="다음 본문 ${esc(nb.next.ref)}"><span>${refHtml(nb.next.ref)}</span>${icon("next")}</a>` : '<span class="ghostlink"></span>'}
+  </nav>`;
+  const top = `<header class="top">
+    <a class="iconbtn only-narrow" href="#/s/${vol}/${num}" aria-label="구절표로">${icon("menu")}</a>
+    <a class="iconbtn" href="#/" aria-label="서재로">${icon("home")}</a>
+    <div class="t" style="flex:1 1 auto"></div>
+    ${modes}
+    <button class="iconbtn" type="button" data-act="theme" aria-label="${curTheme() === "dark" ? "밝은 바탕으로" : "어두운 바탕으로"}">${icon(curTheme() === "dark" ? "sun" : "moon")}</button>
+  </header>`;
+  const main = `${top}${sheet}${pager}`;
+  $app.innerHTML = isWide ? `<div class="split">${aside(vol, st, p.no)}<div class="split-main">${main}</div></div>` : main;
+  if (isWide) {
+    const cur = $app.querySelector('.split-aside [aria-current="true"]');
+    if (cur) cur.scrollIntoView({ block: "center" });
+  }
+  S.ctx = { vol, num, p, st, mode, nb };
+  if (mode === "rec") wireRec();
+}
+
+// ───────── 녹음 · 채점
+function recBody(p, v, m) {
+  const prevLine = m && m.sessions ? `지난번 표시 ${m.lastCount ?? 0}곳 · 채점 ${m.sessions}번` : "처음 녹음해요";
+  if (v.rec === "idle" || v.rec === "denied") {
+    return `<div class="rec-panel">
+      <div class="rec-row"><button class="rec-btn" type="button" data-act="recstart" aria-label="녹음 시작">${icon("mic")}</button>
+      <div class="rec-info"><b>본문을 가리고 선포해 보세요</b><span>${prevLine}</span></div></div>
+      ${v.rec === "denied" ? `<p class="hint" style="margin:0">마이크를 쓸 수 없어요. 브라우저 설정에서 마이크 허용을 켜 주세요.</p>` : `<p class="hint" style="margin:0">녹음은 이 기기 안에서만 잠시 쓰고 올리지 않아요. 다 듣고 표시한 결과만 저장돼요.</p>`}
+    </div>${versesHide(p, new Set(), { hide: "first", open: new Set(), openAll: false })}`;
+  }
+  if (v.rec === "recording") {
+    return `<div class="rec-panel">
+      <div class="rec-row"><button class="rec-btn stop" type="button" data-act="recstop" aria-label="녹음 멈추기">${icon("stop")}</button>
+      <div class="rec-info"><b>녹음 중 <span id="recTime">0:00</span></b><span>다 외웠으면 멈춤을 누르세요</span></div></div>
+      <div class="meter" aria-hidden="true"><i id="recMeter"></i></div>
+    </div>${versesHide(p, new Set(), { hide: "first", open: new Set(), openAll: false })}`;
+  }
+  // 다 녹음함 → 들으며 표시
+  const n = Object.keys(v.marks).length;
+  return `<div class="rec-panel">
+      <audio id="recAudio" controls preload="auto" src="${v.url}"></audio>
+      <div class="legend"><span>낱말을 누를 때마다</span><span class="lg-miss">틀림</span><span class="lg-skip">빠뜨림</span><span class="lg-hes">머뭇거림</span><span>→ 지우기</span></div>
+    </div>
+    ${versesGrade(p, v.marks)}
+    ${v.result ? `<div class="result" style="margin-top:16px">${esc(v.result)}</div>` : ""}
+    <div class="breath-ctrl">
+      <button class="btn ghost" type="button" data-act="recagain">다시 녹음</button>
+      <button class="btn" type="button" data-act="recsave" ${v.saved ? "disabled" : ""}>${v.saved ? "저장했어요" : `채점 저장 (${n}곳)`}</button>
+    </div>`;
+}
+
+function wireRec() {
+  const v = S.view;
+  if (v.rec === "recording" && !v.ticking) { v.ticking = true; tickRec(); }
+}
+
+async function recStart() {
+  const v = S.view;
+  if (!navigator.mediaDevices || !window.MediaRecorder) { toast("이 브라우저는 녹음을 지원하지 않아요"); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) { v.rec = "denied"; render(); return; }
+  const types = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/aac"];
+  const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || "";
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: rec.mimeType || mime || "audio/mp4" });
+    if (v.url) URL.revokeObjectURL(v.url);
+    v.url = URL.createObjectURL(blob);
+    v.rec = "done"; v.marks = {}; v.saved = false; v.result = null;
+    stopStream();
+    render();
+  };
+  let ac = null, an = null;
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ac.createMediaStreamSource(stream);
+    an = ac.createAnalyser(); an.fftSize = 512; src.connect(an);
+  } catch (e) {}
+  function stopStream() {
+    stream.getTracks().forEach((t) => t.stop());
+    if (ac) ac.close().catch(() => {});
+    cancelAnimationFrame(v.raf);
+  }
+  v.recorder = rec; v.an = an; v.t0 = Date.now(); v.rec = "recording";
+  S.cleanup = () => {
+    try { if (rec.state !== "inactive") { rec.onstop = null; rec.stop(); } } catch (e) {}
+    stopStream();
+    if (v.url) URL.revokeObjectURL(v.url);
+  };
+  rec.start();
+  render();
+}
+
+function tickRec() {
+  const v = S.view;
+  const buf = v.an ? new Uint8Array(v.an.fftSize) : null;
+  const step = () => {
+    if (v.rec !== "recording") { v.ticking = false; return; }
+    const s = Math.floor((Date.now() - v.t0) / 1000);
+    const t = document.getElementById("recTime");
+    if (t) t.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    const mtr = document.getElementById("recMeter");
+    if (mtr && v.an) {
+      v.an.getByteTimeDomainData(buf);
+      let peak = 0; for (const x of buf) peak = Math.max(peak, Math.abs(x - 128));
+      mtr.style.width = Math.min(100, (peak / 128) * 160) + "%";
+    }
+    v.raf = requestAnimationFrame(step);
+  };
+  step();
+}
+
+async function recSave() {
+  const v = S.view, c = S.ctx;
+  const n = Object.keys(v.marks).length;
+  const prev = S.marks[c.p.id];
+  try {
+    await B.addMarks(S.user.uid, c.p.id, v.marks, { ref: c.p.ref, vol: c.vol, num: c.num, no: c.p.no });
+  } catch (e) { toast("저장하지 못했어요. 인터넷 연결을 확인해 주세요."); return; }
+  const before = prev && prev.sessions ? prev.lastCount ?? 0 : null;
+  v.result = n === 0 ? "표시한 곳 없이 모두 맞게 선포했어요!" :
+    before === null ? `${n}곳 표시했어요. 다음 녹음과 비교해 드릴게요.` :
+    n < before ? `${n}곳 표시 · 지난번보다 ${before - n}곳 줄었어요.` :
+    n === before ? `${n}곳 표시 · 지난번과 같아요.` : `${n}곳 표시 · 지난번보다 ${n - before}곳 늘었어요.`;
+  v.saved = true;
+  delete S.marks[c.p.id]; S.weak = null;
+  await marksOf(c.p.id);
+  render();
+}
+
+// ───────── 부록 화면 (기도문 · 개념 구호 · 하나님의 이름 · 회개 기도)
+async function viewExtra(vol, kind) {
+  if (!canVol(vol)) return go("#/");
+  const b = await book(vol);
+  if (!b) return viewEmpty("#/");
+  let title = "", inner = "";
+  if (kind === "prayer") {
+    title = "암송 기도문";
+    inner = `<div class="plain-lines">${b.prayer.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</div>`;
+  } else if (kind === "slogans") {
+    title = "암송 선포 개념 구호";
+    inner = `<div class="plain-lines">${b.slogans.map((s, i) => `<div class="slogan"><span class="n">${i + 1}</span>
+      <div><b>말씀암송은</b><br>${esc(s.text).replace(/\n/g, "<br>")} <small>(${esc(s.ref)})</small></div></div>`).join("")}</div>`;
+  } else if (kind === "names" && b.names) {
+    title = "하나님의 이름";
+    inner = `<div class="plain-lines">${b.names.lines.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</div>
+      <div class="decl" style="margin-top:18px">${esc(b.names.close)}</div>`;
+  } else return go("#/b/" + vol);
+  $app.innerHTML = topBar(`<b>${esc(title)}</b>`, "#/b/" + vol) +
+    `<main class="wrap"><article class="sheet" style="margin:6px 0 0"><div class="crumb">${esc(VOL_NAME[vol])}</div><h1 class="ptitle">${esc(title)}</h1>${inner}</article></main>`;
+}
+
+async function viewList(vol, num, k) {
+  if (!canVol(vol)) return go("#/");
+  const st = await stage(vol, num);
+  const l = st && st.lists && st.lists[k - 1];
+  if (!l) return go(`#/s/${vol}/${num}`);
+  $app.innerHTML = topBar(`<b>${esc(l.title)}</b>`, `#/s/${vol}/${num}`) +
+    `<main class="wrap"><article class="sheet" style="margin:6px 0 0"><div class="crumb">${esc(VOL_NAME[vol])} · ${esc(st.label)}</div>
+    <h1 class="ptitle">${esc(l.title)}</h1><p class="hint">한 줄씩 소리 내어 고백합니다</p>
+    <div>${l.items.map((x) => `<div class="rep">${esc(x)}</div>`).join("")}</div>
+    ${l.after ? `<div class="pnote-box">${esc(l.after)}</div>` : ""}</article></main>`;
+}
+
+// ───────── 설정
+function viewSettings() {
+  const theme = pref("theme", "cream"), size = pref("size", "1"), mode = pref("mode", "read");
+  const opt = (name, val, cur, label) => `<button class="chip" type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${label}</button>`;
+  $app.innerHTML = topBar("<b>설정</b>", "#/") + `<main class="wrap">
+    <div class="field"><b>바탕</b><div class="opts">${opt("theme", "cream", theme, "크림 북")}${opt("theme", "dark", theme, "어두운 초록")}${opt("theme", "auto", theme, "기기 설정 따라")}</div>
+      <p>바탕은 기기마다 따로 기억해요. 폰은 크림, 패드는 어두운 초록처럼 쓸 수 있어요.</p></div>
+    <div class="field"><b>본문 글자 크기</b><div class="opts">${opt("size", "0.9", size, "작게")}${opt("size", "1", size, "보통")}${opt("size", "1.15", size, "크게")}${opt("size", "1.3", size, "아주 크게")}</div></div>
+    <div class="field"><b>본문을 열 때 기본 방식</b><div class="opts">${MODES.map((m) => opt("mode", m.id, mode, m.label)).join("")}</div></div>
+    <div class="field"><b>계정</b><p>${esc(S.user.email)}</p><div class="opts"><button class="btn ghost small" type="button" data-act="signout">나가기</button></div></div>
+    <p class="muted" style="margin-top:20px">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>
+  </main>`;
+}
+
+// ───────── 관리자
+async function viewAdmin() {
+  if (!S.admin) return go("#/");
+  let rows = [];
+  try { rows = await B.listAllow(); } catch (e) { toast("목록을 불러오지 못했어요"); }
+  const volChecks = (prefix, vols) => `<div class="checks">${VOLS.map((v) =>
+    `<label><input type="checkbox" name="${prefix}" value="${v}" ${vols.includes(v) ? "checked" : ""}>${v}권</label>`).join("")}</div>`;
+  const list = rows.map((r) => `<div class="adm-row" data-email="${esc(r.email)}">
+      <div class="who"><b>${esc(r.email)}</b><span>${esc(r.name || "")}${r.role === "admin" ? " · 관리자" : ""}</span></div>
+      <div class="ctl">${volChecks("v_" + r.email, r.vols || [])}
+        <select aria-label="역할" data-role><option value="user" ${r.role !== "admin" ? "selected" : ""}>열람</option><option value="admin" ${r.role === "admin" ? "selected" : ""}>관리자</option></select>
+        <button class="btn small" type="button" data-act="allowsave">저장</button>
+        <button class="btn ghost small" type="button" data-act="allowdel">삭제</button></div></div>`).join("");
+  const counts = VOLS.map((v) => `${v}권 ${rows.filter((r) => (r.vols || []).includes(v)).length}명`).join(" · ");
+  $app.innerHTML = topBar("<b>열람 허용 관리</b>", "#/") + `<main class="wrap">
+    <div class="page-h"><span class="kicker">관리자</span><h1>열람 허용 메일</h1><div class="meta">${rows.length}명 · ${counts}</div></div>
+    <form class="adm-add" id="addForm">
+      <label>구글 메일 주소<input type="email" name="email" required placeholder="name@gmail.com" autocomplete="off"></label>
+      <label>이름 (선택)<input type="text" name="name" placeholder="홍길동 · 3학년 학부모"></label>
+      <div><span class="muted">볼 수 있는 책</span>${volChecks("v_new", ["1", "2", "3"])}</div>
+      <button class="btn" type="submit">허용 추가</button>
+    </form>
+    <div class="sec-h">등록된 메일</div>
+    ${list || '<p class="muted">아직 등록된 메일이 없어요.</p>'}
+    <div class="sec-h">본문 올리기</div>
+    <div class="upload">
+      <p class="muted" style="margin:0">제작 키트의 <b>amsong_content.json</b> 파일을 고르면 1·2·3권 본문이 올라가요. 책을 고쳐 다시 뽑았을 때도 같은 방법으로 덮어써요.</p>
+      <label class="btn ghost small" style="align-self:flex-start">파일 고르기<input type="file" accept="application/json,.json" id="contentFile" class="sr"></label>
+      <span class="muted" id="upMsg"></span>
+    </div>
+  </main>`;
+  document.getElementById("addForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = e.target, email = f.email.value.trim().toLowerCase();
+    const vols = [...f.querySelectorAll('input[name="v_new"]:checked')].map((x) => x.value);
+    if (!email) return;
+    try { await B.setAllow(email, { vols, name: f.name.value.trim(), role: "user" }); toast("추가했어요"); viewAdmin(); }
+    catch (err) { toast("추가하지 못했어요"); }
+  });
+  document.getElementById("contentFile").addEventListener("change", async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const msg = document.getElementById("upMsg");
+    try {
+      const json = JSON.parse(await file.text());
+      msg.textContent = "올리는 중…";
+      const n = await B.uploadContent(json, (d, t) => { msg.textContent = `올리는 중… ${d} / ${t}`; });
+      S.books = {}; S.stages = {};
+      msg.textContent = `다 올렸어요 (${n}개 문서). 서재에서 확인해 보세요.`;
+    } catch (err) { msg.textContent = "올리지 못했어요: " + (err.message || err); }
+  });
+}
+
+// ───────── 클릭 처리
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-act],[data-hide],[data-say],[data-pref],[data-tok],[data-line]");
+  if (!t) return;
+  const v = S.view;
+  if (t.dataset.tok) {
+    const k = t.dataset.tok, cur = v.marks[k];
+    const nxt = cur ? MARKS[MARKS.indexOf(cur) + 1] : MARKS[0];
+    if (nxt) v.marks[k] = nxt; else delete v.marks[k];
+    t.className = "tok" + (v.marks[k] ? " m-" + v.marks[k] : "");
+    t.setAttribute("aria-label", t.textContent + (v.marks[k] ? " · " + MARK_LABEL[v.marks[k]] : ""));
+    v.saved = false; v.result = null;
+    const sb = document.querySelector('[data-act="recsave"]');
+    if (sb) { sb.disabled = false; sb.textContent = `채점 저장 (${Object.keys(v.marks).length}곳)`; }
+    return;
+  }
+  if (t.dataset.line) {
+    const k = t.dataset.line;
+    if (v.openAll) {
+      // 모두 열린 상태에서 누른 줄만 다시 가리기
+      v.openAll = false;
+      v.open = new Set([...document.querySelectorAll("[data-line]")].map((x) => x.dataset.line));
+    }
+    v.open.has(k) ? v.open.delete(k) : v.open.add(k);
+    return render();
+  }
+  if (t.dataset.hide) { v.hide = t.dataset.hide; v.open = new Set(); v.openAll = false; return render(); }
+  if (t.dataset.say) {
+    const d = Number(t.dataset.say);
+    v.say = d === 0 ? 0 : Math.max(0, (v.say || 0) + d);
+    return render();
+  }
+  if (t.dataset.pref) { setPref(t.dataset.pref, t.dataset.val); applyTheme(); return render(); }
+  switch (t.dataset.act) {
+    case "signin":
+      try { await B.signIn(); } catch (err) { toast("로그인하지 못했어요: " + (err.code || err.message)); }
+      break;
+    case "signout": await B.signOut(); location.hash = "#/"; break;
+    case "recheck": await boot(S.user); break;
+    case "theme": toggleTheme(); break;
+    case "openall": v.openAll = !v.openAll; v.open = new Set(); render(); break;
+    case "memo": {
+      const id = S.ctx.p.id, on = !memorized(id);
+      S.userDoc.memorized = S.userDoc.memorized || {};
+      if (on) S.userDoc.memorized[id] = true; else delete S.userDoc.memorized[id];
+      render();
+      B.setMemorized(S.user.uid, id, on).catch(() => toast("저장하지 못했어요"));
+      if (on) toast("외운 본문으로 표시했어요");
+      break;
+    }
+    case "recstart": recStart(); break;
+    case "recstop": if (v.recorder && v.recorder.state !== "inactive") v.recorder.stop(); break;
+    case "recagain":
+      if (v.url) URL.revokeObjectURL(v.url);
+      v.url = null; v.rec = "idle"; v.marks = {}; v.result = null; v.saved = false; render(); break;
+    case "recsave": recSave(); break;
+    case "allowsave": {
+      const row = t.closest(".adm-row"), email = row.dataset.email;
+      const vols = [...row.querySelectorAll('input[type="checkbox"]:checked')].map((x) => x.value);
+      const role = row.querySelector("[data-role]").value;
+      try { await B.setAllow(email, { vols, role }); toast("저장했어요"); } catch (err) { toast("저장하지 못했어요"); }
+      break;
+    }
+    case "allowdel": {
+      const email = t.closest(".adm-row").dataset.email;
+      if (email === S.user.email) { toast("내 계정은 지울 수 없어요"); break; }
+      if (!confirm(email + " 의 열람 허용을 지울까요?")) break;
+      try { await B.deleteAllow(email); viewAdmin(); } catch (err) { toast("지우지 못했어요"); }
+      break;
+    }
+  }
+});
+document.addEventListener("keydown", (e) => {
+  const t = e.target;
+  if ((e.key === "Enter" || e.key === " ") && t.dataset && t.dataset.line) { e.preventDefault(); t.click(); }
+});
+
+// 폰에서 옆으로 밀어 이전/다음 본문
+let tx = null, ty = null;
+document.addEventListener("touchstart", (e) => { if (e.touches.length === 1) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; } }, { passive: true });
+document.addEventListener("touchend", (e) => {
+  if (tx === null || !S.ctx || !location.hash.startsWith("#/p/")) return;
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
+  tx = null;
+  if (Math.abs(dx) < 80 || Math.abs(dy) > 50 || S.ctx.mode === "rec") return;
+  const n = dx < 0 ? S.ctx.nb.next : S.ctx.nb.prev;
+  if (n) go(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
+}, { passive: true });
+
+// 기기 방향·크기가 바뀌면 (패드 회전 등) 배치를 다시 그림
+let lastWide = wide() + "" + xwide();
+window.addEventListener("resize", () => { const w = wide() + "" + xwide(); if (w !== lastWide) { lastWide = w; render(); } });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (pref("theme", "cream") === "auto") { applyTheme(); render(); } });
+
+// ───────── 그리기
+let rendering = 0;
+async function render() {
+  const my = ++rendering;
+  if (!S.user) return viewLogin();
+  if (!S.allow && !S.admin) return viewPending();
+  const { parts, q } = parseHash();
+  // 같은 화면을 다시 그릴 때는 스크롤 위치 유지, 다른 화면으로 가면 맨 위로
+  const route = location.hash.split("?")[0];
+  const sameRoute = S._route === route;
+  const keepY = window.scrollY;
+  S._route = route;
+  try {
+    const [r, a, b2, c] = parts;
+    if (r !== "p" && S.cleanup) { S.cleanup(); S.cleanup = null; S.view = {}; }
+    if (!r) await viewLibrary();
+    else if (r === "b") await viewBook(a);
+    else if (r === "s") await viewStage(a, Number(b2));
+    else if (r === "p") await viewPassage(a, Number(b2), Number(c), q);
+    else if (r === "x") await viewExtra(a, b2);
+    else if (r === "l") await viewList(a, Number(b2), Number(c));
+    else if (r === "settings") viewSettings();
+    else if (r === "admin") await viewAdmin();
+    else go("#/");
+  } catch (err) {
+    if (my !== rendering) return;
+    console.error(err);
+    $app.innerHTML = topBar("", "#/") + `<main class="wrap"><div class="gate" style="min-height:50vh"><h1 style="font-size:22px">불러오지 못했어요</h1>
+      <p>${err && err.code === "permission-denied" ? "이 본문을 볼 권한이 없어요." : "인터넷 연결을 확인한 뒤 다시 열어 주세요."}</p>
+      <div class="actions"><a class="btn" href="#/">서재로</a></div></div></main>`;
+  }
+  if (my === rendering) window.scrollTo(0, sameRoute ? keepY : 0);
+}
+
+// ───────── 시작
+async function boot(user) {
+  S.user = user; S.allow = null; S.admin = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
+  if (!user) return render();
+  S.allow = await B.getAllow(user.email);
+  if (!S.allow || S.allow.role === "admin") S.admin = await B.isAdmin();
+  if (!S.allow && S.admin) {
+    // 최고 관리자: 처음 들어오면 내 허용 정보를 자동으로 만듦
+    await B.setAllow(user.email, { vols: VOLS, role: "admin", name: user.name }).catch(() => {});
+    S.allow = { vols: VOLS, role: "admin" };
+  }
+  if (S.allow) { try { S.userDoc = await B.getUserDoc(user.uid); } catch (e) { S.userDoc = {}; } }
+  render();
+}
+
+applyTheme();
+B.onAuth((u) => boot(u));
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}

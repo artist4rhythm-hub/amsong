@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.1.0";
+const VERSION = "1.2.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "주니어 1", "2": "주니어 2", "3": "주니어 3 · 성벽기도" };
 const VOL_COVER = {
@@ -17,6 +17,7 @@ const MODES = [
   { id: "say", label: "선포" },
   { id: "rec", label: "녹음 채점" }
 ];
+const MODE_TAB = { read: "#2F5D4E", hide: "#28554A", say: "#1F4A44", rec: "#16302A" };
 const MARKS = ["miss", "skip", "hes"];
 const MARK_LABEL = { miss: "틀림", skip: "빠뜨림", hes: "머뭇거림" };
 
@@ -54,7 +55,7 @@ function applyTheme() {
   let t = pref("theme", "cream");
   if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "cream";
   document.documentElement.setAttribute("data-theme", t);
-  document.getElementById("themeColor").setAttribute("content", t === "dark" ? "#132A24" : "#F7F4EC");
+  document.getElementById("themeColor").setAttribute("content", t === "dark" ? "#132A24" : "#EFE8D9");
   document.documentElement.style.setProperty("--fs-scale", pref("size", "1"));
 }
 const curTheme = () => document.documentElement.getAttribute("data-theme");
@@ -103,21 +104,42 @@ function parseHash() {
 const go = (h) => { if (location.hash === h) render(); else location.hash = h; };
 window.addEventListener("hashchange", () => render());
 
-// ───────── 머리줄
+// ───────── 머리줄 (책상 위)
+const themeBtn = () => `<button class="iconbtn" type="button" data-act="theme" aria-label="${curTheme() === "dark" ? "밝은 바탕으로" : "어두운 바탕으로"}">${icon(curTheme() === "dark" ? "sun" : "moon")}</button>`;
 function topBar(title, back, extra = "") {
   return `<header class="top">
     ${back ? `<a class="iconbtn" href="${back}" aria-label="뒤로">${icon("back")}</a>` : ""}
     <div class="t">${title}</div>
     ${extra}
-    <button class="iconbtn" type="button" data-act="theme" aria-label="${curTheme() === "dark" ? "밝은 바탕으로" : "어두운 바탕으로"}">${icon(curTheme() === "dark" ? "sun" : "moon")}</button>
+    ${themeBtn()}
   </header>`;
 }
 
+// ───────── 책 모양 틀
+// 책상 위에 놓인 책 한 권(초록 표지 + 종이). tabs가 있으면 종이 위에 책갈피 색인을 붙임
+const tome = (inner, tabs = "") =>
+  `${tabs}<div class="tome${tabs ? " tabbed" : ""}"><div class="leaf paperink">${inner}</div></div>`;
+const deskPage = (top, body) => `<div class="desk">${top}<main class="desk-main">${body}</main></div>`;
+// 넓은 화면: 두 쪽 펼친 책 (왼쪽 구절표 · 오른쪽 본문)
+const openBook = (top, left, right, tabs = "") => `<div class="desk ob-desk">${top}
+  <div class="ob-wrap">${tabs ? `<div class="ob-tabs">${tabs}</div>` : ""}
+    <div class="ob"><div class="ob-stack"></div><div class="ob-pages">
+      <aside class="ob-l paperink" data-keep="l" aria-label="단계 구절표">${left}</aside>
+      <div class="ob-gutter" aria-hidden="true"></div>
+      <section class="ob-r paperink" data-keep="r">${right}</section>
+    </div></div>
+  </div></div>`;
+
 // ───────── 화면: 로그인 · 대기
 function viewLogin() {
-  $app.innerHTML = `<main class="gate">
-    <span class="kicker">다니엘 아마츠</span>
-    <h1>말씀암송<br>선포구절</h1>
+  $app.innerHTML = `<main class="gate cover-gate">
+    <div class="cv" role="img" aria-label="말씀암송 선포구절 책 표지">
+      <small>다니엘 아마츠</small>
+      <span class="cv-rule"></span>
+      <h1>말씀암송<br>선포구절</h1>
+      <span class="cv-rule"></span>
+      <span class="cv-sub">주니어 1 · 2 · 3</span>
+    </div>
     <p>등록된 구글 계정으로 들어와 주세요.</p>
     <div class="actions">
       <button class="btn google" type="button" data-act="signin">
@@ -129,7 +151,7 @@ function viewLogin() {
 }
 
 function viewPending() {
-  $app.innerHTML = `<main class="gate">
+  $app.innerHTML = `<main class="gate">${tome(`
     <span class="kicker">승인 대기</span>
     <h1>아직 열람 허용이<br>되지 않았어요</h1>
     <p>아래 메일 주소를 관리자에게 알려 주세요. 등록되면 바로 볼 수 있어요.</p>
@@ -137,8 +159,14 @@ function viewPending() {
     <div class="actions">
       <button class="btn" type="button" data-act="recheck">다시 확인</button>
       <button class="btn ghost" type="button" data-act="signout">다른 계정으로 들어가기</button>
-    </div>
+    </div>`)}
   </main>`;
+}
+
+// 안내 한 장 (본문 없음 · 오류)
+function notePage(back, title, msg, action = "") {
+  $app.innerHTML = deskPage(topBar("", back), tome(`<div class="note-page">
+    <h1 class="ptitle">${title}</h1><p class="muted">${msg}</p>${action ? `<div class="tools">${action}</div>` : ""}</div>`));
 }
 
 // ───────── 화면: 서재
@@ -309,33 +337,19 @@ function fitAll() {
 }
 
 // ───────── 화면: 책 (단계 목록)
+// 책의 단계 목록은 서재의 '단계 · 진도' 쪽과 같으므로, 그 책을 펼친 서재로 보냄
 async function viewBook(vol) {
   if (!canVol(vol)) return go("#/");
-  const b = await book(vol);
-  if (!b) return viewEmpty("#/");
-  const cards = b.stages.map((s) => {
-    const done = memCountStage(vol, s.num);
-    return `<a class="stage-card" href="#/s/${vol}/${s.num}"><b>${esc(s.label)}</b>
-      <span>본문 ${s.count}개 · ${s.verses}절${s.groups && s.groups.length ? " · " + esc(s.groups.join(" · ")) : ""}</span>
-      <em>외운 본문 ${done} / ${s.count}</em></a>`;
-  }).join("");
-  $app.innerHTML = topBar(`<b>${esc(VOL_NAME[vol])}</b>`, "#/") + `<main class="wrap">
-    <div class="page-h"><span class="kicker">말씀암송 선포구절</span><h1>${esc(b.title)}</h1>
-    <div class="meta">${esc(b.range)} · 본문 ${b.total}개 · 외운 본문 ${memCount(vol)}</div></div>
-    <div class="stage-cards">${cards}</div>
-    <div class="sec-h">함께 읽기</div>
-    <div class="extras">
-      <a class="row-link" href="#/x/${vol}/prayer"><b>암송 기도문</b><span>암송 전에</span></a>
-      <a class="row-link" href="#/x/${vol}/slogans"><b>암송 선포 개념 구호</b><span>말씀암송은</span></a>
-      ${b.names ? `<a class="row-link" href="#/x/${vol}/names"><b>하나님의 이름</b><span>고백 기도</span></a>` : ""}
-    </div></main>`;
+  LIB.vol = vol; LIB.side = 1; setPref("libVol", vol); setPref("libSide", "1");
+  history.replaceState(null, "", "#/");
+  S._route = "#/";
+  return viewLibrary();
 }
 
 function viewEmpty(back) {
-  $app.innerHTML = topBar("", back) + `<main class="wrap"><div class="gate" style="min-height:50vh">
-    <h1 style="font-size:24px">본문이 아직 없어요</h1>
-    <p>${S.admin ? "관리 화면에서 본문 파일을 올려 주세요." : "관리자가 본문을 올리면 볼 수 있어요."}</p>
-    ${S.admin ? '<div class="actions"><a class="btn" href="#/admin">관리 화면으로</a></div>' : ""}</div></main>`;
+  notePage(back, "본문이 아직 없어요",
+    S.admin ? "관리 화면에서 본문 파일을 올려 주세요." : "관리자가 본문을 올리면 볼 수 있어요.",
+    S.admin ? '<a class="btn" href="#/admin">관리 화면으로</a>' : "");
 }
 
 // ───────── 단계 구절표 (책과 같은 녹색 상자 · 소주제)
@@ -364,33 +378,33 @@ function stageHead(vol, st, b) {
 }
 
 const wide = () => matchMedia("(min-width: 1000px)").matches;
-const xwide = () => matchMedia("(min-width: 1360px)").matches;
 
 async function viewStage(vol, num) {
   if (!canVol(vol)) return go("#/");
   const [b, st] = await Promise.all([book(vol), stage(vol, num)]);
   if (!b || !st) return viewEmpty("#/b/" + vol);
   if (wide()) {
-    // 패드 가로 · 컴퓨터: 왼쪽 구절표 + 오른쪽 안내
+    // 패드 가로 · 컴퓨터: 펼친 책 — 왼쪽 구절표 + 오른쪽 시작 안내
     const first = st.passages.find((p) => !memorized(p.id)) || st.passages[0];
-    $app.innerHTML = `<div class="split">${aside(vol, st, null)}<div class="split-main">
-      ${topBar(`<b>${esc(st.label)}</b>`, "#/b/" + vol)}
-      <div class="sheet empty"><div class="crumb">${esc(VOL_NAME[vol])}</div>
-        <div class="ptitle">${esc(st.label)}</div>
-        <p class="muted" style="margin-top:16px">왼쪽 구절표에서 본문을 고르세요.</p>
-        <div class="tools"><a class="btn" href="#/p/${vol}/${num}/${first.no}">${refHtml(first.ref)}부터 외우기</a></div>
-      </div></div></div>`;
+    const done = memCountStage(vol, num), w = st.passages.length ? Math.round((done / st.passages.length) * 100) : 0;
+    const right = `<div class="ob-intro">
+        <div class="crumb">${esc(VOL_NAME[vol])}</div>
+        <h1 class="ptitle">${esc(st.label)}</h1>
+        <div class="intro-prog"><span class="ps-bar"><i style="width:${w}%"></i></span><span>외운 본문 <b>${done}</b> / ${st.passages.length}</span></div>
+        <p class="muted">왼쪽 구절표에서 본문을 고르거나, 아직 외우지 않은 본문부터 시작하세요.</p>
+        <div class="tools"><a class="btn" href="#/p/${vol}/${num}/${first.no}">${refHtml(first.ref)}부터 외우기 ${icon("next")}</a></div>
+      </div>`;
+    $app.innerHTML = openBook(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol), leftPage(vol, st, null), right);
     return;
   }
-  $app.innerHTML = topBar(`<b>${esc(st.label)}</b>`, "#/b/" + vol) +
-    `<main class="wrap">${stageHead(vol, st, b)}${stageList(vol, st, null)}</main>`;
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol),
+    tome(`${stageHead(vol, st, b)}${stageList(vol, st, null)}`));
 }
 
-function aside(vol, st, curNo) {
-  return `<aside class="split-aside" aria-label="단계 구절표">
-    <div style="display:flex;align-items:center;margin-left:-12px"><a class="iconbtn" href="#/b/${vol}" aria-label="단계 목록">${icon("back")}</a>
-    <span class="muted">${esc(VOL_NAME[vol])}</span></div>
-    ${stageHead(vol, st)}${stageList(vol, st, curNo)}</aside>`;
+// 펼친 책의 왼쪽 쪽: 단계 구절표
+function leftPage(vol, st, curNo) {
+  return `<a class="ob-back" href="#/b/${vol}">${icon("back")}<span>${esc(VOL_NAME[vol])} · 단계 목록</span></a>
+    ${stageHead(vol, st)}${stageList(vol, st, curNo)}`;
 }
 
 // ───────── 본문 화면
@@ -407,7 +421,7 @@ function neighbors(b, st, no) {
 }
 
 function crumbOf(st, p) {
-  return [VOL_NAME[st.vol], st.label, p.group].filter(Boolean).map(esc).join(" · ");
+  return [st.label, p.group].filter(Boolean).map(esc).join(" · ");
 }
 
 function headHtml(st, p) {
@@ -467,7 +481,7 @@ function versesSay(p, v) {
 }
 
 function versesGrade(p, marks) {
-  return `<div class="verses grade">${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
+  return `<div class="verses grade" data-fit>${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
     ${vs.lines.map((l, li) => `<span class="ln">${words(l).map((w, wi) => {
       const k = `${vi}-${li}-${wi}`, m = marks[k];
       return `<button type="button" class="tok${m ? " m-" + m : ""}" data-tok="${k}" aria-label="${esc(w)}${m ? " · " + MARK_LABEL[m] : ""}">${esc(w)}</button>`;
@@ -522,15 +536,12 @@ async function viewPassage(vol, num, no, q) {
     body = recBody(p, v, m);
   }
 
-  const statLine = m && m.sessions ? `<div class="side-h">나의 녹음 채점</div><p class="muted" style="margin:0">채점 ${m.sessions}번 · 지난번 표시 ${m.lastCount ?? 0}곳 · 누적 ${m.total ?? 0}곳</p>` : "";
+  const statLine = m && m.sessions && mode !== "rec" ? `<div class="side-h">나의 녹음 채점</div><p class="muted" style="margin:0">채점 ${m.sessions}번 · 지난번 표시 ${m.lastCount ?? 0}곳 · 누적 ${m.total ?? 0}곳</p>` : "";
   const isWide = wide();
-  const two = xwide() && mode !== "rec" && !!(side || statLine);
-  const sheet = `<article class="sheet${two ? " two" : ""}">
-    <div class="main-col">${headHtml(st, p)}${body}${two ? "" : side}</div>
-    ${two ? `<div class="side">${side ? `<div class="side-h">선포 · 안내</div>${side}` : ""}${statLine}</div>` : ""}
-  </article>`;
-  const modes = `<nav class="modes" aria-label="보기 방식">${MODES.map((x) =>
-    `<a href="#/p/${vol}/${num}/${p.no}?m=${x.id}" ${x.id === mode ? 'aria-current="page"' : ""}>${x.id === "rec" ? '<span class="dot"></span>' : ""}${x.label}</a>`).join("")}</nav>`;
+  const sheet = `<article class="sheet">${headHtml(st, p)}${body}${side}${statLine}</article>`;
+  // 보기 방식: 종이 위에 꽂힌 책갈피 색인
+  const modes = `<nav class="tabs-top mode-tabs" aria-label="보기 방식">${MODES.map((x) =>
+    `<a class="btab" href="#/p/${vol}/${num}/${p.no}?m=${x.id}" style="--tabc:${MODE_TAB[x.id]}" ${x.id === mode ? 'aria-current="page"' : ""}>${x.id === "rec" ? '<span class="dot"></span>' : ""}<b>${x.label}</b></a>`).join("")}</nav>`;
   const on = memorized(p.id);
   const pager = `<nav class="pager" aria-label="본문 이동">
     ${nb.prev ? `<a href="#/p/${nb.prev.vol}/${nb.prev.num}/${nb.prev.no}?m=${mode}" aria-label="이전 본문 ${esc(nb.prev.ref)}">${icon("back")}<span>${refHtml(nb.prev.ref)}</span></a>` : '<span class="ghostlink"></span>'}
@@ -538,17 +549,20 @@ async function viewPassage(vol, num, no, q) {
     ${nb.next ? `<a href="#/p/${nb.next.vol}/${nb.next.num}/${nb.next.no}?m=${mode}" aria-label="다음 본문 ${esc(nb.next.ref)}"><span>${refHtml(nb.next.ref)}</span>${icon("next")}</a>` : '<span class="ghostlink"></span>'}
   </nav>`;
   const top = `<header class="top">
-    <a class="iconbtn only-narrow" href="#/s/${vol}/${num}" aria-label="구절표로">${icon("menu")}</a>
+    ${isWide ? "" : `<a class="iconbtn" href="#/s/${vol}/${num}" aria-label="구절표로">${icon("menu")}</a>`}
     <a class="iconbtn" href="#/" aria-label="서재로">${icon("home")}</a>
-    <div class="t" style="flex:1 1 auto"></div>
-    ${modes}
-    <button class="iconbtn" type="button" data-act="theme" aria-label="${curTheme() === "dark" ? "밝은 바탕으로" : "어두운 바탕으로"}">${icon(curTheme() === "dark" ? "sun" : "moon")}</button>
+    <div class="t">${esc(VOL_NAME[vol])}${isWide ? "" : ` · <b>${esc(st.label)}</b>`}</div>
+    ${themeBtn()}
   </header>`;
-  const main = `${top}${sheet}${pager}`;
-  $app.innerHTML = isWide ? `<div class="split">${aside(vol, st, p.no)}<div class="split-main">${main}</div></div>` : main;
   if (isWide) {
-    const cur = $app.querySelector('.split-aside [aria-current="true"]');
-    if (cur) cur.scrollIntoView({ block: "center" });
+    $app.innerHTML = openBook(top, leftPage(vol, st, p.no), sheet + pager, modes);
+    // 다른 단계에서 왔을 때만 왼쪽 구절표를 지금 본문 쪽으로 (같은 단계 안에서는 render가 위치 유지)
+    if (S._keepL == null) {
+      const L = $app.querySelector(".ob-l"), cur = L && L.querySelector('[aria-current="true"]');
+      if (cur) L.scrollTop = Math.max(0, cur.offsetTop - L.clientHeight / 2);
+    }
+  } else {
+    $app.innerHTML = deskPage(top, tome(sheet + pager, modes));
   }
   S.ctx = { vol, num, p, st, mode, nb };
   fitAll();
@@ -687,8 +701,8 @@ async function viewExtra(vol, kind) {
     inner = `<div class="plain-lines">${b.names.lines.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</div>
       <div class="decl" style="margin-top:18px">${esc(b.names.close)}</div>`;
   } else return go("#/b/" + vol);
-  $app.innerHTML = topBar(`<b>${esc(title)}</b>`, "#/b/" + vol) +
-    `<main class="wrap"><article class="sheet" style="margin:6px 0 0"><div class="crumb">${esc(VOL_NAME[vol])}</div><h1 class="ptitle">${esc(title)}</h1>${inner}</article></main>`;
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(title)}</b>`, "#/b/" + vol),
+    tome(`<article class="sheet"><div class="crumb">함께 읽기</div><h1 class="ptitle">${esc(title)}</h1>${inner}</article>`));
 }
 
 async function viewList(vol, num, k) {
@@ -696,25 +710,25 @@ async function viewList(vol, num, k) {
   const st = await stage(vol, num);
   const l = st && st.lists && st.lists[k - 1];
   if (!l) return go(`#/s/${vol}/${num}`);
-  $app.innerHTML = topBar(`<b>${esc(l.title)}</b>`, `#/s/${vol}/${num}`) +
-    `<main class="wrap"><article class="sheet" style="margin:6px 0 0"><div class="crumb">${esc(VOL_NAME[vol])} · ${esc(st.label)}</div>
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, `#/s/${vol}/${num}`),
+    tome(`<article class="sheet"><div class="crumb">${esc(st.label)}</div>
     <h1 class="ptitle">${esc(l.title)}</h1><p class="hint">한 줄씩 소리 내어 고백합니다</p>
     <div>${l.items.map((x) => `<div class="rep">${esc(x)}</div>`).join("")}</div>
-    ${l.after ? `<div class="pnote-box">${esc(l.after)}</div>` : ""}</article></main>`;
+    ${l.after ? `<div class="pnote-box">${esc(l.after)}</div>` : ""}</article>`));
 }
 
 // ───────── 설정
 function viewSettings() {
   const theme = pref("theme", "cream"), size = pref("size", "1"), mode = pref("mode", "read");
   const opt = (name, val, cur, label) => `<button class="chip" type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${label}</button>`;
-  $app.innerHTML = topBar("<b>설정</b>", "#/") + `<main class="wrap">
+  $app.innerHTML = deskPage(topBar("<b>설정</b>", "#/"), tome(`
+    <div class="page-h"><span class="kicker">설정</span><h1>나에게 맞게</h1></div>
     <div class="field"><b>바탕</b><div class="opts">${opt("theme", "cream", theme, "크림 북")}${opt("theme", "dark", theme, "어두운 초록")}${opt("theme", "auto", theme, "기기 설정 따라")}</div>
       <p>바탕은 기기마다 따로 기억해요. 폰은 크림, 패드는 어두운 초록처럼 쓸 수 있어요.</p></div>
     <div class="field"><b>본문 글자 크기</b><div class="opts">${opt("size", "0.9", size, "작게")}${opt("size", "1", size, "보통")}${opt("size", "1.15", size, "크게")}${opt("size", "1.3", size, "아주 크게")}</div></div>
     <div class="field"><b>본문을 열 때 기본 방식</b><div class="opts">${MODES.map((m) => opt("mode", m.id, mode, m.label)).join("")}</div></div>
     <div class="field"><b>계정</b><p>${esc(S.user.email)}</p><div class="opts"><button class="btn ghost small" type="button" data-act="signout">나가기</button></div></div>
-    <p class="muted" style="margin-top:20px">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>
-  </main>`;
+    <p class="muted colo">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>`));
 }
 
 // ───────── 관리자
@@ -731,7 +745,7 @@ async function viewAdmin() {
         <button class="btn small" type="button" data-act="allowsave">저장</button>
         <button class="btn ghost small" type="button" data-act="allowdel">삭제</button></div></div>`).join("");
   const counts = VOLS.map((v) => `${v}권 ${rows.filter((r) => (r.vols || []).includes(v)).length}명`).join(" · ");
-  $app.innerHTML = topBar("<b>열람 허용 관리</b>", "#/") + `<main class="wrap">
+  $app.innerHTML = deskPage(topBar("<b>열람 허용 관리</b>", "#/"), tome(`
     <div class="page-h"><span class="kicker">관리자</span><h1>열람 허용 메일</h1><div class="meta">${rows.length}명 · ${counts}</div></div>
     <form class="adm-add" id="addForm">
       <label>구글 메일 주소<input type="email" name="email" required placeholder="name@gmail.com" autocomplete="off"></label>
@@ -746,8 +760,7 @@ async function viewAdmin() {
       <p class="muted" style="margin:0">제작 키트의 <b>amsong_content.json</b> 파일을 고르면 1·2·3권 본문이 올라가요. 책을 고쳐 다시 뽑았을 때도 같은 방법으로 덮어써요.</p>
       <label class="btn ghost small" style="align-self:flex-start">파일 고르기<input type="file" accept="application/json,.json" id="contentFile" class="sr"></label>
       <span class="muted" id="upMsg"></span>
-    </div>
-  </main>`;
+    </div>`));
   document.getElementById("addForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target, email = f.email.value.trim().toLowerCase();
@@ -871,8 +884,8 @@ document.addEventListener("touchend", (e) => {
 }, { passive: true });
 
 // 기기 방향·크기가 바뀌면 (패드 회전 등) 배치를 다시 그림
-let lastWide = wide() + "" + xwide() + spreadMode();
-window.addEventListener("resize", () => { const w = wide() + "" + xwide() + spreadMode(); if (w !== lastWide) { lastWide = w; render(); } else fitAll(); });
+let lastWide = wide() + "" + spreadMode();
+window.addEventListener("resize", () => { const w = wide() + "" + spreadMode(); if (w !== lastWide) { lastWide = w; render(); } else fitAll(); });
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (pref("theme", "cream") === "auto") { applyTheme(); render(); } });
 
 // ───────── 그리기
@@ -886,6 +899,11 @@ async function render() {
   const route = location.hash.split("?")[0];
   const sameRoute = S._route === route;
   const keepY = window.scrollY;
+  // 펼친 책은 쪽마다 따로 넘겨 보므로 그 위치도 기억: 오른쪽은 같은 화면일 때, 왼쪽 구절표는 같은 단계 안일 때
+  const stageKey = (r) => { const x = (r || "").split("/"); return (x[1] === "p" || x[1] === "s") ? x[2] + "/" + x[3] : null; };
+  const oldL = document.querySelector('[data-keep="l"]'), oldR = document.querySelector('[data-keep="r"]');
+  S._keepL = oldL && stageKey(route) && stageKey(route) === stageKey(S._route) ? oldL.scrollTop : null;
+  const keepR = oldR && sameRoute ? oldR.scrollTop : null;
   S._route = route;
   try {
     const [r, a, b2, c] = parts;
@@ -902,11 +920,15 @@ async function render() {
   } catch (err) {
     if (my !== rendering) return;
     console.error(err);
-    $app.innerHTML = topBar("", "#/") + `<main class="wrap"><div class="gate" style="min-height:50vh"><h1 style="font-size:22px">불러오지 못했어요</h1>
-      <p>${err && err.code === "permission-denied" ? "이 본문을 볼 권한이 없어요." : "인터넷 연결을 확인한 뒤 다시 열어 주세요."}</p>
-      <div class="actions"><a class="btn" href="#/">서재로</a></div></div></main>`;
+    notePage("#/", "불러오지 못했어요",
+      err && err.code === "permission-denied" ? "이 본문을 볼 권한이 없어요." : "인터넷 연결을 확인한 뒤 다시 열어 주세요.",
+      '<a class="btn" href="#/">서재로</a>');
   }
-  if (my === rendering) window.scrollTo(0, sameRoute ? keepY : 0);
+  if (my !== rendering) return;
+  window.scrollTo(0, sameRoute ? keepY : 0);
+  const nl = document.querySelector('[data-keep="l"]'), nr = document.querySelector('[data-keep="r"]');
+  if (nl && S._keepL != null) nl.scrollTop = S._keepL;
+  if (nr && keepR != null) nr.scrollTop = keepR;
 }
 
 // ───────── 시작

@@ -1,5 +1,5 @@
 // Firebase 연결 (로그인 · 열람 허용 · 본문 · 내 암송 기록)
-// 컬렉션 이름은 모두 amsong_ 으로 시작해서 같은 프로젝트의 다른 앱(교사 선교사 등)과 섞이지 않습니다.
+// 말씀암송 앱 전용 Firebase 프로젝트를 씁니다 (교사 선교사 등 다른 앱과 분리). 컬렉션 이름은 amsong_ 으로 시작합니다.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signInWithRedirect,
@@ -114,8 +114,12 @@ export async function getUserDoc(uid) {
   return s.exists() ? s.data() : {};
 }
 
+// 지난 위치: 전체 마지막 + 책(권)마다 마지막
 export const setLast = (uid, last) =>
-  setDoc(doc(db, "amsong_users", uid), { last: { ...last, at: serverTimestamp() } }, { merge: true });
+  setDoc(doc(db, "amsong_users", uid), {
+    last: { ...last, at: serverTimestamp() },
+    lastByVol: { [last.vol]: { num: last.num, no: last.no, ref: last.ref, label: last.label } }
+  }, { merge: true });
 
 export const setMemorized = (uid, pid, on) =>
   setDoc(doc(db, "amsong_users", uid), { memorized: { [pid]: on ? serverTimestamp() : deleteField() } }, { merge: true });

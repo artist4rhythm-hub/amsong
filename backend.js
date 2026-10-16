@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, getDoc, setDoc, deleteDoc, collection, getDocs, query, orderBy, limit,
+  doc, getDoc, getDocFromCache, getDocFromServer, setDoc, deleteDoc, collection, getDocs, query, orderBy, limit,
   writeBatch, serverTimestamp, increment, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -20,6 +20,15 @@ const db = initializeFirestore(app, {
 });
 
 const lower = (s) => (s || "").trim().toLowerCase();
+
+// 기기에 보관된 것이 있으면 바로 쓰고(빠름), 뒤에서 서버의 새 내용을 받아 다음번을 위해 보관
+async function cacheFirst(ref) {
+  try {
+    const c = await getDocFromCache(ref);
+    if (c.exists()) { getDocFromServer(ref).catch(() => {}); return c; }
+  } catch (e) {}
+  return getDoc(ref);
+}
 
 export function onAuth(cb) {
   getRedirectResult(auth).catch(() => {});
@@ -80,12 +89,12 @@ export const deleteAllow = (email) => deleteDoc(doc(db, "amsong_allow", lower(em
 
 // ── 본문
 export async function getBook(vol) {
-  const s = await getDoc(doc(db, "amsong_books", String(vol)));
+  const s = await cacheFirst(doc(db, "amsong_books", String(vol)));
   return s.exists() ? s.data() : null;
 }
 
 export async function getStage(vol, num) {
-  const s = await getDoc(doc(db, "amsong_books", String(vol), "stages", String(num)));
+  const s = await cacheFirst(doc(db, "amsong_books", String(vol), "stages", String(num)));
   return s.exists() ? s.data() : null;
 }
 
@@ -125,7 +134,7 @@ export const setMemorized = (uid, pid, on) =>
   setDoc(doc(db, "amsong_users", uid), { memorized: { [pid]: on ? serverTimestamp() : deleteField() } }, { merge: true });
 
 export async function getMarks(uid, pid) {
-  const s = await getDoc(doc(db, "amsong_users", uid, "marks", pid));
+  const s = await cacheFirst(doc(db, "amsong_users", uid, "marks", pid));
   return s.exists() ? s.data() : null;
 }
 

@@ -2,9 +2,14 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.2.0";
+const VERSION = "1.3.0";
 const VOLS = ["1", "2", "3"];
-const VOL_NAME = { "1": "주니어 1", "2": "주니어 2", "3": "주니어 3 · 성벽기도" };
+const VOL_NAME = { "1": "말씀 선포 1권", "2": "말씀 선포 2권", "3": "말씀 선포 3권 · 성벽기도" };
+const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
+// 올려 둔 본문에 남아 있는 '주니어' 이름을 화면에서는 '말씀 선포'로 (본문 파일을 다시 올리지 않아도 됨)
+const fixName = (s) => String(s || "")
+  .replace(/^주니어\s*(\d+)\s*단계$/, "말씀 선포 $1단계").replace(/^Junior\s*Step\s*(\d+)$/i, "말씀 선포 $1단계")
+  .replace(/^주니어\s*(\d+)/, "말씀 선포 $1권").replace(/주니어\s*/g, "").replace(/Junior\s*/gi, "");
 const VOL_COVER = {
   "1": "linear-gradient(180deg,#E6F0EB 0 48%,#BFD6CB 48% 62%,#86B09E 62% 76%,#4A876F 76% 88%,#1E3932 88%)",
   "2": "linear-gradient(180deg,#DCE8E3 0 44%,#B9CEC5 44% 60%,#7FA898 60% 74%,#006241 74% 88%,#16302A 88%)",
@@ -66,12 +71,20 @@ function toggleTheme() {
 
 // ───────── 데이터
 async function book(vol) {
-  if (!S.books[vol]) S.books[vol] = await B.getBook(vol);
+  if (!S.books[vol]) {
+    const b = await B.getBook(vol);
+    if (b) { b.title = fixName(b.title); (b.stages || []).forEach((x) => { x.label = fixName(x.label); }); }
+    S.books[vol] = b;
+  }
   return S.books[vol];
 }
 async function stage(vol, num) {
   const k = vol + "_" + num;
-  if (!S.stages[k]) S.stages[k] = await B.getStage(vol, num);
+  if (!S.stages[k]) {
+    const st = await B.getStage(vol, num);
+    if (st) st.label = fixName(st.label);
+    S.stages[k] = st;
+  }
   return S.stages[k];
 }
 async function marksOf(pid) {
@@ -79,6 +92,18 @@ async function marksOf(pid) {
     try { S.marks[pid] = await B.getMarks(S.user.uid, pid); } catch (e) { S.marks[pid] = null; }
   }
   return S.marks[pid];
+}
+// 채점 기록은 화면을 기다리게 하지 않음: 있으면 바로 쓰고, 없으면 받아 온 뒤 필요할 때만 다시 그림
+function marksNow(pid) {
+  if (pid in S.marks) return S.marks[pid];
+  if (!S._marksLoading) S._marksLoading = {};
+  if (!S._marksLoading[pid]) {
+    S._marksLoading[pid] = marksOf(pid).then((m) => {
+      delete S._marksLoading[pid];
+      if (m && (m.sessions || m.total) && S.ctx && S.ctx.p.id === pid && location.hash.startsWith("#/p/")) render();
+    });
+  }
+  return null;
 }
 const canVol = (v) => S.admin || (S.allow && (S.allow.vols || []).includes(v));
 const memorized = (pid) => !!(S.userDoc.memorized && S.userDoc.memorized[pid]);
@@ -138,7 +163,7 @@ function viewLogin() {
       <span class="cv-rule"></span>
       <h1>말씀암송<br>선포구절</h1>
       <span class="cv-rule"></span>
-      <span class="cv-sub">주니어 1 · 2 · 3</span>
+      <span class="cv-sub">1 · 2 · 3권</span>
     </div>
     <p>등록된 구글 계정으로 들어와 주세요.</p>
     <div class="actions">
@@ -173,7 +198,6 @@ function notePage(back, title, msg, action = "") {
 // ───────── 화면: 서재 — 펼친 책 (패드·컴퓨터: 두 쪽 펼침 / 폰: 한 쪽씩 넘기기)
 // 가로로 넓은 화면(패드 가로·컴퓨터·폰 가로)만 두 쪽 펼침, 세로 화면은 한 쪽씩
 const spreadMode = () => matchMedia("(min-width: 700px) and (orientation: landscape)").matches;
-const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const LIB = { vol: null, side: Number(pref("libSide", "0")) || 0 };
 
 async function libData(vol) {
@@ -236,15 +260,19 @@ function libStagesPage(vol, D) {
         <span class="ps-bar"><i style="width:${w}%"></i></span></span><span class="ps-n">${s.done}/${s.count}</span>${icon("next")}</a>`;
     }).join("")}</div>
     ${weak.length ? `<div class="pg-sub">자주 틀리는 본문</div>${weak.map((w) =>
-      `<a class="pg-weak" href="#/p/${w.vol}/${w.num}/${w.no}?m=hide">${refHtml(w.ref)}<span>표시 ${w.total}곳</span></a>`).join("")}` : ""}
+      `<a class="pg-weak" href="#/p/${w.vol}/${w.num}/${w.no}?m=hide"><b>${refHtml(w.ref)}</b><span class="wk-n">표시 ${w.total}곳</span></a>`).join("")}` : ""}
     <div class="pg-sub">함께 읽기</div>
     <div class="pg-extras"><a href="#/x/${vol}/prayer">암송 기도문</a><a href="#/x/${vol}/slogans">개념 구호</a>${D.b.names ? `<a href="#/x/${vol}/names">하나님의 이름</a>` : ""}</div>`;
 }
 
 async function viewLibrary() {
+  const rid = rendering;
   const vols = [];
   for (const v of VOLS) if (canVol(v)) { try { if (await book(v)) vols.push(v); } catch (e) {} }
-  if (S.weak === null) { try { S.weak = await B.weakList(S.user.uid, 8); } catch (e) { S.weak = []; } }
+  if (S.weak === null) {
+    S.weak = [];
+    B.weakList(S.user.uid, 8).then((w) => { S.weak = w; if (w.length && !location.hash.replace(/^#\/?/, "")) render(); }).catch(() => {});
+  }
   const top = `<header class="lib-top">
       <span class="lib-brand"><small>다니엘 아마츠</small><b>말씀암송 선포구절</b></span>
       <span style="display:flex">${S.admin ? `<a class="iconbtn" href="#/admin" aria-label="열람 허용 관리">${icon("users")}</a>` : ""}
@@ -262,11 +290,13 @@ async function viewLibrary() {
     const lastV = S.userDoc.last && S.userDoc.last.vol;
     LIB.vol = vols.includes(saved) ? saved : vols.includes(lastV) ? lastV : vols[0];
   }
+  if (rid !== rendering) return;
   const vol = LIB.vol;
   const D = await libData(vol);
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   const tabs = vols.map((v) => {
     const b = S.books[v], pct = b && b.total ? Math.round((memCount(v) / b.total) * 100) : 0;
-    const label = spreadMode() ? `${v}권` : esc(VOL_NAME[v].split(" · ")[0]);
+    const label = VOL_SHORT[v];
     return `<button class="btab" type="button" role="tab" data-libvol="${v}" aria-selected="${v === vol}" aria-label="${esc(VOL_NAME[v])} · 외움 ${pct}%" style="--tabc:${VOL_TAB[v]}">
       <b>${label}</b><span>${spreadMode() ? "" : "외움 "}${pct}%</span></button>`;
   }).join("");
@@ -300,27 +330,8 @@ async function viewLibrary() {
   fitAll();
 }
 
-// 책장 넘기기: 넘어가는 종이를 보여 주고, 가운데쯤에서 내용을 바꿈
-let libTurning = false;
-function libTurn(change) {
-  if (libTurning) return;
-  const host = document.querySelector(spreadMode() ? ".sp-right" : "#libPages");
-  if (!host || reduceMotion()) { change(); render(); return; }
-  libTurning = true;
-  // 화면을 다시 그려도 사라지지 않도록, 넘어가는 종이를 화면 위에 따로 띄움
-  const r = host.getBoundingClientRect();
-  const wrap = document.createElement("div");
-  wrap.className = "turn-wrap";
-  wrap.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px`;
-  wrap.innerHTML = '<div class="turn-leaf"><i></i><i></i></div>';
-  document.body.appendChild(wrap);
-  const leaf = wrap.firstChild;
-  void leaf.offsetWidth;
-  leaf.style.transform = "rotateY(-180deg)";
-  setTimeout(() => { change(); render(); }, 330);
-  setTimeout(() => { wrap.remove(); libTurning = false; }, 780);
-}
-
+// 책 바꾸기 · 쪽 넘기기: 효과 없이 바로 바뀜 (폰에서 멈칫거리지 않게)
+function libTurn(change) { change(); render(); }
 // 책의 한 줄이 한 줄로 보이도록 글자 크기 자동 맞춤 (최소 82%)
 function fitAll() {
   document.querySelectorAll("[data-fit]").forEach((box) => {
@@ -374,14 +385,16 @@ function stageList(vol, st, curNo) {
 function stageHead(vol, st, b) {
   const nverse = st.passages.reduce((a, p) => a + p.verses.length, 0);
   return `<div class="page-h"><span class="kicker">${st.lang === "en" ? "STEP" : "단계 구절"}</span><h1>${esc(st.label)}</h1>
-    <div class="meta">${esc(VOL_NAME[vol])} · 본문 ${st.passages.length}개 · ${nverse}절 · 외운 본문 ${memCountStage(vol, st.num)}</div></div>`;
+    <div class="meta">${esc(VOL_SHORT[vol])} · 본문 ${st.passages.length}개 · ${nverse}절 · 외운 본문 ${memCountStage(vol, st.num)}</div></div>`;
 }
 
 const wide = () => matchMedia("(min-width: 1000px)").matches;
 
 async function viewStage(vol, num) {
   if (!canVol(vol)) return go("#/");
+  const rid = rendering;
   const [b, st] = await Promise.all([book(vol), stage(vol, num)]);
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   if (!b || !st) return viewEmpty("#/b/" + vol);
   if (wide()) {
     // 패드 가로 · 컴퓨터: 펼친 책 — 왼쪽 구절표 + 오른쪽 시작 안내
@@ -394,16 +407,16 @@ async function viewStage(vol, num) {
         <p class="muted">왼쪽 구절표에서 본문을 고르거나, 아직 외우지 않은 본문부터 시작하세요.</p>
         <div class="tools"><a class="btn" href="#/p/${vol}/${num}/${first.no}">${refHtml(first.ref)}부터 외우기 ${icon("next")}</a></div>
       </div>`;
-    $app.innerHTML = openBook(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol), leftPage(vol, st, null), right);
+    $app.innerHTML = openBook(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol), leftPage(vol, st, null), right);
     return;
   }
-  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol),
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol),
     tome(`${stageHead(vol, st, b)}${stageList(vol, st, null)}`));
 }
 
 // 펼친 책의 왼쪽 쪽: 단계 구절표
 function leftPage(vol, st, curNo) {
-  return `<a class="ob-back" href="#/b/${vol}">${icon("back")}<span>${esc(VOL_NAME[vol])} · 단계 목록</span></a>
+  return `<a class="ob-back" href="#/b/${vol}">${icon("back")}<span>${esc(VOL_SHORT[vol])} · 단계 목록</span></a>
     ${stageHead(vol, st)}${stageList(vol, st, curNo)}`;
 }
 
@@ -450,20 +463,22 @@ function maskWord(w, how) {
   return esc(w[0]) + `<span class="mk">${"○".repeat(Math.max(0, w.length - 1))}</span>`;
 }
 
+// 가리기 한 줄 (줄을 누르면 그 줄만 바꿔 끼움 — 화면 전체를 다시 그리지 않아 빠름)
+function hideLine(p, weak, v, vi, li) {
+  const how = v.hide || "first", l = p.verses[vi].lines[li];
+  const key = `${vi}-${li}`;
+  if (v.open.has(key) || v.openAll) return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 다시 가리기">${esc(l)}</span>`;
+  const ws = words(l).map((w, wi) => {
+    const k = `${vi}-${li}-${wi}`;
+    if (how === "weak") return weak.has(k) ? maskWord(w, "first") : esc(w);
+    return maskWord(w, how);
+  }).join(" ");
+  return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 열기">${ws}</span>`;
+}
+
 function versesHide(p, weak, v) {
-  const how = v.hide || "first";
   return `<div class="verses" data-fit>${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
-    ${vs.lines.map((l, li) => {
-      const key = `${vi}-${li}`;
-      const open = v.open.has(key) || v.openAll;
-      if (open) return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 다시 가리기">${esc(l)}</span>`;
-      const ws = words(l).map((w, wi) => {
-        const k = `${vi}-${li}-${wi}`;
-        if (how === "weak") return weak.has(k) ? maskWord(w, "first") : esc(w);
-        return maskWord(w, how);
-      }).join(" ");
-      return `<span class="ln masked" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 열기">${ws}</span>`;
-    }).join("")}</div></div>`).join("")}</div>`;
+    ${vs.lines.map((l, li) => hideLine(p, weak, v, vi, li)).join("")}</div></div>`).join("")}</div>`;
 }
 
 function versesSay(p, v) {
@@ -490,7 +505,9 @@ function versesGrade(p, marks) {
 
 async function viewPassage(vol, num, no, q) {
   if (!canVol(vol)) return go("#/");
+  const rid = rendering;
   const [b, st] = await Promise.all([book(vol), stage(vol, num)]);
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   if (!b || !st) return viewEmpty("#/b/" + vol);
   const p = st.passages.find((x) => x.no === no) || st.passages[0];
   const mode = MODES.some((m) => m.id === q.m) ? q.m : pref("mode", "read");
@@ -500,7 +517,7 @@ async function viewPassage(vol, num, no, q) {
     S.view = { key, open: new Set(), openAll: false, hide: S.view.hide || "first", say: 0, rec: "idle", marks: {}, result: null };
   }
   const v = S.view;
-  const m = await marksOf(p.id);
+  const m = marksNow(p.id);
   const weak = weakSet(m);
   const nb = neighbors(b, st, p.no);
 
@@ -541,17 +558,17 @@ async function viewPassage(vol, num, no, q) {
   const sheet = `<article class="sheet">${headHtml(st, p)}${body}${side}${statLine}</article>`;
   // 보기 방식: 종이 위에 꽂힌 책갈피 색인
   const modes = `<nav class="tabs-top mode-tabs" aria-label="보기 방식">${MODES.map((x) =>
-    `<a class="btab" href="#/p/${vol}/${num}/${p.no}?m=${x.id}" style="--tabc:${MODE_TAB[x.id]}" ${x.id === mode ? 'aria-current="page"' : ""}>${x.id === "rec" ? '<span class="dot"></span>' : ""}<b>${x.label}</b></a>`).join("")}</nav>`;
+    `<a class="btab" data-nav="replace" href="#/p/${vol}/${num}/${p.no}?m=${x.id}" style="--tabc:${MODE_TAB[x.id]}" ${x.id === mode ? 'aria-current="page"' : ""}>${x.id === "rec" ? '<span class="dot"></span>' : ""}<b>${x.label}</b></a>`).join("")}</nav>`;
   const on = memorized(p.id);
   const pager = `<nav class="pager" aria-label="본문 이동">
-    ${nb.prev ? `<a href="#/p/${nb.prev.vol}/${nb.prev.num}/${nb.prev.no}?m=${mode}" aria-label="이전 본문 ${esc(nb.prev.ref)}">${icon("back")}<span>${refHtml(nb.prev.ref)}</span></a>` : '<span class="ghostlink"></span>'}
+    ${nb.prev ? `<a data-nav="replace" href="#/p/${nb.prev.vol}/${nb.prev.num}/${nb.prev.no}?m=${mode}" aria-label="이전 본문 ${esc(nb.prev.ref)}">${icon("back")}<span>${refHtml(nb.prev.ref)}</span></a>` : '<span class="ghostlink"></span>'}
     <button class="memo-btn" type="button" data-act="memo" aria-pressed="${on}">${icon("check")}${on ? "외웠어요" : "외웠어요 표시"}</button>
-    ${nb.next ? `<a href="#/p/${nb.next.vol}/${nb.next.num}/${nb.next.no}?m=${mode}" aria-label="다음 본문 ${esc(nb.next.ref)}"><span>${refHtml(nb.next.ref)}</span>${icon("next")}</a>` : '<span class="ghostlink"></span>'}
+    ${nb.next ? `<a data-nav="replace" href="#/p/${nb.next.vol}/${nb.next.num}/${nb.next.no}?m=${mode}" aria-label="다음 본문 ${esc(nb.next.ref)}"><span>${refHtml(nb.next.ref)}</span>${icon("next")}</a>` : '<span class="ghostlink"></span>'}
   </nav>`;
   const top = `<header class="top">
     ${isWide ? "" : `<a class="iconbtn" href="#/s/${vol}/${num}" aria-label="구절표로">${icon("menu")}</a>`}
     <a class="iconbtn" href="#/" aria-label="서재로">${icon("home")}</a>
-    <div class="t">${esc(VOL_NAME[vol])}${isWide ? "" : ` · <b>${esc(st.label)}</b>`}</div>
+    <div class="t">${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b></div>
     ${themeBtn()}
   </header>`;
   if (isWide) {
@@ -686,7 +703,9 @@ async function recSave() {
 // ───────── 부록 화면 (기도문 · 개념 구호 · 하나님의 이름 · 회개 기도)
 async function viewExtra(vol, kind) {
   if (!canVol(vol)) return go("#/");
+  const rid = rendering;
   const b = await book(vol);
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   if (!b) return viewEmpty("#/");
   let title = "", inner = "";
   if (kind === "prayer") {
@@ -701,16 +720,18 @@ async function viewExtra(vol, kind) {
     inner = `<div class="plain-lines">${b.names.lines.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</div>
       <div class="decl" style="margin-top:18px">${esc(b.names.close)}</div>`;
   } else return go("#/b/" + vol);
-  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(title)}</b>`, "#/b/" + vol),
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(title)}</b>`, "#/b/" + vol),
     tome(`<article class="sheet"><div class="crumb">함께 읽기</div><h1 class="ptitle">${esc(title)}</h1>${inner}</article>`));
 }
 
 async function viewList(vol, num, k) {
   if (!canVol(vol)) return go("#/");
+  const rid = rendering;
   const st = await stage(vol, num);
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   const l = st && st.lists && st.lists[k - 1];
   if (!l) return go(`#/s/${vol}/${num}`);
-  $app.innerHTML = deskPage(topBar(`${esc(VOL_NAME[vol])} · <b>${esc(st.label)}</b>`, `#/s/${vol}/${num}`),
+  $app.innerHTML = deskPage(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, `#/s/${vol}/${num}`),
     tome(`<article class="sheet"><div class="crumb">${esc(st.label)}</div>
     <h1 class="ptitle">${esc(l.title)}</h1><p class="hint">한 줄씩 소리 내어 고백합니다</p>
     <div>${l.items.map((x) => `<div class="rep">${esc(x)}</div>`).join("")}</div>
@@ -734,8 +755,10 @@ function viewSettings() {
 // ───────── 관리자
 async function viewAdmin() {
   if (!S.admin) return go("#/");
+  const rid = rendering;
   let rows = [];
   try { rows = await B.listAllow(); } catch (e) { toast("목록을 불러오지 못했어요"); }
+  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   const volChecks = (prefix, vols) => `<div class="checks">${VOLS.map((v) =>
     `<label><input type="checkbox" name="${prefix}" value="${v}" ${vols.includes(v) ? "checked" : ""}>${v}권</label>`).join("")}</div>`;
   const list = rows.map((r) => `<div class="adm-row" data-email="${esc(r.email)}">
@@ -784,6 +807,8 @@ async function viewAdmin() {
 
 // ───────── 클릭 처리
 document.addEventListener("click", async (e) => {
+  const nav = e.target.closest("a[data-nav]");
+  if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
   const t = e.target.closest("[data-act],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol]");
   if (!t) return;
   if (t.dataset.libvol) {
@@ -811,7 +836,10 @@ document.addEventListener("click", async (e) => {
       v.open = new Set([...document.querySelectorAll("[data-line]")].map((x) => x.dataset.line));
     }
     v.open.has(k) ? v.open.delete(k) : v.open.add(k);
-    return render();
+    if (!S.ctx || v.openAll) return render();
+    const [vi, li] = k.split("-").map(Number);
+    t.outerHTML = hideLine(S.ctx.p, weakSet(S.marks[S.ctx.p.id]), v, vi, li);
+    return;
   }
   if (t.dataset.hide) { v.hide = t.dataset.hide; v.open = new Set(); v.openAll = false; return render(); }
   if (t.dataset.say) {
@@ -867,7 +895,15 @@ document.addEventListener("keydown", (e) => {
 
 // 폰에서 옆으로 밀어 이전/다음 본문
 let tx = null, ty = null;
-document.addEventListener("touchstart", (e) => { if (e.touches.length === 1) { tx = e.touches[0].clientX; ty = e.touches[0].clientY; } }, { passive: true });
+document.addEventListener("touchstart", (e) => {
+  tx = null;
+  if (e.touches.length !== 1) return;
+  const x = e.touches[0].clientX;
+  // 화면 가장자리에서 시작한 밀기는 기기의 '뒤로 가기' 몸짓이라 건드리지 않음
+  if (x < 28 || x > window.innerWidth - 28) return;
+  if (e.target.closest("audio, input, select, .tok")) return;
+  tx = x; ty = e.touches[0].clientY;
+}, { passive: true });
 document.addEventListener("touchend", (e) => {
   if (tx === null) return;
   const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty;
@@ -880,12 +916,22 @@ document.addEventListener("touchend", (e) => {
   if (!S.ctx || !location.hash.startsWith("#/p/")) return;
   if (Math.abs(dx) < 80 || Math.abs(dy) > 50 || S.ctx.mode === "rec") return;
   const n = dx < 0 ? S.ctx.nb.next : S.ctx.nb.prev;
-  if (n) go(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
+  if (n) location.replace(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
 }, { passive: true });
 
 // 기기 방향·크기가 바뀌면 (패드 회전 등) 배치를 다시 그림
-let lastWide = wide() + "" + spreadMode();
-window.addEventListener("resize", () => { const w = wide() + "" + spreadMode(); if (w !== lastWide) { lastWide = w; render(); } else fitAll(); });
+let lastWide = wide() + "" + spreadMode(), lastW = window.innerWidth, rzT = 0;
+window.addEventListener("resize", () => {
+  clearTimeout(rzT);
+  rzT = setTimeout(() => {
+    if (window.innerWidth === lastW) return;
+    lastW = window.innerWidth;
+    const w = wide() + "" + spreadMode();
+    if (w !== lastWide) { lastWide = w; render(); } else fitAll();
+  }, 150);
+});
+// 글꼴이 다 내려온 뒤 한 번만 줄 맞춤 다시
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => fitAll());
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (pref("theme", "cream") === "auto") { applyTheme(); render(); } });
 
 // ───────── 그리기
@@ -935,6 +981,8 @@ async function render() {
 async function boot(user) {
   S.user = user; S.allow = null; S.admin = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
   if (!user) return render();
+  // 열람 허용과 내 기록을 한꺼번에 받아 시작을 빠르게
+  const udoc = B.getUserDoc(user.uid).catch(() => null);
   S.allow = await B.getAllow(user.email);
   if (!S.allow || S.allow.role === "admin") S.admin = await B.isAdmin();
   if (!S.allow && S.admin) {
@@ -942,7 +990,11 @@ async function boot(user) {
     await B.setAllow(user.email, { vols: VOLS, role: "admin", name: user.name }).catch(() => {});
     S.allow = { vols: VOLS, role: "admin" };
   }
-  if (S.allow) { try { S.userDoc = await B.getUserDoc(user.uid); } catch (e) { S.userDoc = {}; } }
+  if (S.allow) {
+    let ud = await udoc;
+    if (!ud) { try { ud = await B.getUserDoc(user.uid); } catch (e) {} } // 처음 허용된 직후 등
+    S.userDoc = ud || {};
+  }
   render();
 }
 

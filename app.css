@@ -382,7 +382,7 @@ svg.i { width: 22px; height: 22px; flex: none; }
 @media (max-height: 640px) { .ob-r .ob-scroll { padding-top: 24px; } .ob-l .ob-scroll { padding-top: 10px; } .folio { height: 26px; } }
 /* 큰 화면에서는 글자도 책 크기에 맞춰 크게 */
 @media (min-width: 1300px) and (min-height: 760px) {
-  .ob-r { --fs: calc(20.5px * var(--fs-scale)); }
+  .ob { --fs: calc(20.5px * var(--fs-scale)); }
   .ob-r .ptitle { font-size: 30px; }
   .ob-l .srow .ref { font-size: 17px; }
   .ob-l .ob-scroll { padding-left: 56px; padding-right: 64px; }
@@ -390,7 +390,7 @@ svg.i { width: 22px; height: 22px; flex: none; }
   .ob-r .pager { margin: 18px -56px 0 -64px; padding: 10px 48px 10px 56px; }
   .folio { padding: 0 56px; }
 }
-@media (min-width: 1600px) and (min-height: 860px) { .ob-r { --fs: calc(22px * var(--fs-scale)); } .ob-r .ptitle { font-size: 32px; } }
+@media (min-width: 1600px) and (min-height: 860px) { .ob { --fs: calc(22px * var(--fs-scale)); } .ob-r .ptitle { font-size: 32px; } }
 
 /* ═════════ 서재 · 펼친 책 ═════════ */
 /* 폰: 위쪽 책갈피 색인 + 한 쪽씩 */
@@ -582,3 +582,69 @@ a, button, .ln.masked { touch-action: manipulation; }
 .ob .pg-lines { margin-top: 20px; }
 .ob .only-spread { display: inline-flex; }
 .ob .lib-cont .pg-go { margin: auto 0 14px; align-self: flex-end; flex: none; }
+
+/* ═════════ 펼친 책으로 읽기 (읽기 · 가리기) — 쪽을 넘겨 봄 ═════════ */
+.bk-mode .ob-scroll, .duo-mode .ob-scroll { overflow: hidden; display: block; }
+.bk-mode .ob-l .ob-scroll, .duo-mode .ob-l .ob-scroll { padding: 40px 60px 4px 52px; }
+.bk-mode .ob-r .ob-scroll, .duo-mode .ob-r .ob-scroll { padding: 40px 52px 4px 60px; }
+.duo-mode .ob-scroll { overflow-y: auto; }
+@media (min-width: 1300px) and (min-height: 760px) {
+  .bk-mode .ob-l .ob-scroll, .duo-mode .ob-l .ob-scroll { padding: 48px 72px 4px 64px; }
+  .bk-mode .ob-r .ob-scroll, .duo-mode .ob-r .ob-scroll { padding: 48px 64px 4px 72px; }
+}
+.bk-measure { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; }
+.bk-p, .bk-m1, .bk-m2 { display: flow-root; }
+.bk-seg + .bk-seg { margin-top: 0; }
+.bk-head { padding-bottom: 2px; }
+.bk-titlerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.bk-titlerow .ptitle { flex: 1 1 auto; min-width: 0; }
+.bk-memo { flex: none; margin-top: 14px; display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1.5px solid var(--line); background: transparent; color: var(--sub); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+.bk-memo svg { width: 15px; height: 15px; }
+.bk-memo[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: #FFFFFF; }
+.bk-run { padding-bottom: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--line2); font-family: var(--serif); font-size: 13px; font-weight: 700; color: var(--sub); }
+.bk-run span { font-weight: 400; }
+.bk-sep { height: 0; border: 0; margin: 26px 0 22px; border-top: 1px solid var(--line2); position: relative; overflow: visible; }
+.bk-sep::after { content: ''; position: absolute; left: 50%; top: -4px; width: 7px; height: 7px; margin-left: -3.5px; transform: rotate(45deg); background: var(--paper); border: 1px solid var(--goldline); }
+.bk-blank { height: 100%; display: flex; align-items: center; justify-content: center; }
+.bk-blank span { font-family: var(--serif); font-size: 12px; letter-spacing: .6em; color: #CFC4AC; padding-left: .6em; }
+.bk-mode .verses { margin-top: 18px; }
+.bk-mode .bk-run + .verses { margin-top: 0; }
+.bk-mode .closing { margin-top: 12px; }
+
+/* 쪽 표시 + 넘기기 (아래 바깥 모서리) */
+.bk-mode .folio, .duo-mode .folio { height: 52px; padding: 0 28px; gap: 10px; }
+.folio .flip { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid transparent; background: transparent; color: #1E3932; font-family: var(--serif); font-size: 13.5px; font-weight: 700; text-decoration: none; white-space: nowrap; max-width: 70%; overflow: hidden; text-overflow: ellipsis; }
+.folio .flip svg { width: 20px; height: 20px; flex: none; }
+.folio .flip:hover { background: rgba(30, 57, 50, .07); }
+.folio .flip:disabled { opacity: 0; pointer-events: none; }
+.folio .pno { font-family: var(--serif); font-size: 12px; color: #9A937F; letter-spacing: .06em; }
+.ob-l .folio { justify-content: flex-start; }
+.ob-r .folio { justify-content: flex-end; }
+
+/* 위쪽 줄 왼쪽: 형광펜 / 가리는 방법 */
+.bk-tools { flex: 1 1 50%; min-width: 0; display: flex; align-items: flex-end; padding: 0 12px 6px 4px; }
+.bk-mode .ob-tabs, .duo-mode .ob-tabs { padding-left: 0; }
+.bk-mode .ob-tabs > nav, .duo-mode .ob-tabs > nav { flex: 1 1 50%; }
+.bk-tools .tools { margin: 0; flex-wrap: nowrap; }
+.bk-tools .chip { min-height: 36px; padding: 0 12px; font-size: 13px; background: rgba(255, 255, 255, .55); }
+[data-theme="dark"] .bk-tools .chip { background: rgba(255, 255, 255, .06); color: var(--ink); }
+.bk-tools .pen-row { margin: 0; }
+.bk-tools .pen-open { min-height: 36px; background: rgba(255, 255, 255, .55); }
+[data-theme="dark"] .bk-tools .pen-open { background: rgba(255, 255, 255, .06); }
+/* 형광펜 도구: 펼친 책 아래쪽에 떠 있는 줄 */
+.bk-mode .pen-bar { position: fixed; top: auto; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; margin: 0; width: max-content; max-width: calc(100vw - 24px); flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid #DDD3BD; border-radius: 18px; background: #FBF8F1; box-shadow: 0 14px 34px rgba(0, 0, 0, .28); --line: #E2D8C3; --chip: #EDE6D6; --ink: #1F2320; --sub: #5F655E; --acc: #00704A; --gold: #8A6410; --paper: #FBF8F1; color: #1F2320; }
+.bk-mode .pen-bar .pb-row { flex-wrap: nowrap; }
+.bk-mode .pb-hint { display: none; }
+
+/* 구절표 서랍 */
+.drawer-back { position: fixed; inset: 0; z-index: 40; background: rgba(10, 20, 16, .35); }
+.drawer { position: fixed; z-index: 41; left: 0; top: 0; bottom: 0; width: min(420px, 88vw); background: var(--paper); box-shadow: 18px 0 40px rgba(0, 0, 0, .3); display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); }
+.drawer-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 4px 26px; }
+.drawer-top .ob-back { margin: 0; }
+.drawer-body { flex: 1 1 auto; overflow-y: auto; padding: 4px 26px 30px 30px; overscroll-behavior: contain; }
+.drawer .page-h h1 { font-size: 24px; }
+
+/* 선포 · 녹음 채점 (두 쪽에 나눔) */
+.duo-mode .sheet { display: block; }
+.duo-mode .ob-r .breath { margin-top: 6px; }
+.duo-mode .ob-r .verses { margin-top: 4px; }

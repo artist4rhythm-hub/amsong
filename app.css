@@ -167,7 +167,7 @@ svg.i { width: 22px; height: 22px; flex: none; }
 .chip[aria-pressed="true"] { background: var(--chip); color: var(--ink); font-weight: 700; border-color: var(--acc); }
 
 /* ───────── 머리줄 (책상 위) */
-.top { display: flex; align-items: center; gap: 2px; padding: calc(8px + env(safe-area-inset-top)) 6px 4px; }
+.top { display: flex; align-items: center; gap: 2px; min-height: calc(56px + env(safe-area-inset-top)); box-sizing: border-box; padding: calc(6px + env(safe-area-inset-top)) 6px 6px; }
 .top .t { flex: 1 1 auto; min-width: 0; padding: 0 4px; font-size: 13.5px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top .t b { font-family: var(--serif); font-size: 15.5px; font-weight: 800; color: var(--pri); }
 
@@ -338,10 +338,15 @@ svg.i { width: 22px; height: 22px; flex: none; }
 /* ═════════ 패드 가로 · 컴퓨터: 좌우가 같은 두 쪽 펼친 책 (왼쪽 구절표 · 오른쪽 본문) ═════════ */
 /* 책 크기: 화면 높이에 맞춰 최대한 크게(가로:세로 ≈ 1.9:1), 화면 폭을 넘지 않게 */
 .ob-desk { height: 100vh; height: 100dvh; min-height: 520px; }
-.ob-wrap { --obw: min(calc(100vw - 48px), calc((100dvh - 92px) * 1.9)); flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: var(--obw); margin: 0 auto; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
-.ob-wrap.has-tabs { --obw: min(calc(100vw - 48px), calc((100dvh - 142px) * 1.9)); }
-.ob-tabs { display: flex; padding-left: 50%; }
+.ob-wrap { --obw: min(calc(100vw - 48px), calc((100dvh - 142px) * 1.9)); flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: var(--obw); margin: 0 auto; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+/* 색인 줄: 늘 같은 높이 (본문 화면은 오른쪽 쪽 위, 서재는 왼쪽 쪽 위, 단계 화면은 빈 자리) */
+.ob-tabs { flex: none; height: 50px; display: flex; align-items: flex-end; padding-left: 50%; }
+.lib-ob .ob-tabs { padding-left: 0; padding-right: 50%; }
 .ob-tabs .tabs-top { width: 100%; max-width: 460px; margin: 0 auto; padding: 0 12px; height: 50px; }
+.book-tabs .btab { gap: 6px; }
+.book-tabs .btab span { font-size: 11.5px; font-weight: 600; opacity: .85; }
+.book-tabs .btab[aria-selected="true"] { height: 48px; padding-bottom: 6px; }
+.book-tabs .btab[aria-selected="true"] span { color: #00704A; opacity: 1; }
 .ob-tabs .mode-tabs .btab { height: 40px; }
 .ob-tabs .mode-tabs .btab[aria-current="page"] { height: 48px; }
 .ob { position: relative; flex: 1 1 auto; min-height: 380px; border-radius: 12px; background: var(--cover); box-shadow: 0 40px 60px -24px rgba(0, 0, 0, .5); }
@@ -390,7 +395,7 @@ svg.i { width: 22px; height: 22px; flex: none; }
 /* ═════════ 서재 · 펼친 책 ═════════ */
 /* 폰: 위쪽 책갈피 색인 + 한 쪽씩 */
 .lib { min-height: 100vh; min-height: 100dvh; background: var(--desk); display: flex; flex-direction: column; }
-.lib-top { display: flex; align-items: center; justify-content: space-between; padding: calc(10px + env(safe-area-inset-top)) 4px 0 18px; }
+.lib-top { justify-content: space-between; padding-left: 18px; }
 .lib-brand { display: flex; flex-direction: column; }
 .lib-brand small { font-size: 9.5px; letter-spacing: .4em; font-weight: 600; color: var(--gold); }
 .lib-brand b { font-family: var(--serif); font-weight: 800; font-size: 17px; color: var(--pri); }
@@ -552,3 +557,28 @@ a, button, .ln.masked { touch-action: manipulation; }
   .desk-main { max-width: 920px; }
   .ptitle { font-size: 30px; }
 }
+
+/* ═════════ 세 화면(서재 · 단계 · 본문) 펼친 책 글자 크기 맞추기 ═════════ */
+.ob { --ttl: 27px; --lft: 24px; }
+@media (min-width: 1300px) and (min-height: 760px) { .ob { --ttl: 30px; --lft: 26px; } }
+.ob .ptitle, .ob .pg-ref, .ob-intro .ptitle { font-size: var(--ttl); }
+.ob-l .page-h h1, .ob .pg-name { font-size: var(--lft); }
+.ob-runhead { cursor: default; }
+.ob-runhead:hover { background: none; }
+/* 서재: 왼쪽 단계 목록도 단계 화면 구절표와 같은 글꼴 · 줄 높이 */
+.ob .pg-head { padding-bottom: 12px; }
+.ob .pg-count b { font-size: 32px; }
+.ob .pg-stage { min-height: 58px; padding: 10px 0; }
+.ob .ps-t { font-family: var(--serif); font-size: 16.5px; font-weight: 700; color: #1F2320; }
+.ob .ps-t small { font-family: 'IBM Plex Sans KR', sans-serif; }
+@media (min-width: 1300px) and (min-height: 760px) { .ob .ps-t { font-size: 17px; } }
+/* 서재: 오른쪽 이어서 외우기 본문도 본문 화면과 같은 크기 */
+.lib-ob .ob-r .ob-scroll { overflow: hidden; padding-bottom: 0; }
+.lib-cont { flex: 1 1 auto; min-height: 0; }
+.ob .pg-line { grid-template-columns: 24px minmax(0, 1fr); }
+.ob .pg-line .vn { font-size: 11.5px; padding-top: calc(var(--fs) * .5); }
+.ob .pg-line .ln { font-size: calc(var(--fs) * var(--fit, 1)); line-height: 1.72; }
+.ob .pg-refrow { margin-top: 12px; }
+.ob .pg-lines { margin-top: 20px; }
+.ob .only-spread { display: inline-flex; }
+.ob .lib-cont .pg-go { margin: auto 0 14px; align-self: flex-end; flex: none; }

@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.4.0";
+const VERSION = "1.4.1";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "말씀 선포 1권", "2": "말씀 선포 2권", "3": "말씀 선포 3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -245,8 +245,9 @@ const tome = (inner, tabs = "") =>
 const deskPage = (top, body) => `<div class="desk">${top}<main class="desk-main">${body}</main></div>`;
 // 넓은 화면(패드 가로 · 컴퓨터): 좌우가 같은 두 쪽 펼친 책 (왼쪽 구절표 · 오른쪽 본문)
 // 쪽마다 따로 넘겨 보고, 아래 바깥쪽 모서리에 책처럼 쪽 표시
-const openBook = (top, left, right, tabs = "", folioL = "", folioR = "") => `<div class="desk ob-desk">${top}
-  <div class="ob-wrap${tabs ? " has-tabs" : ""}">${tabs ? `<div class="ob-tabs">${tabs}</div>` : ""}
+// 서재 · 단계 · 본문 세 화면 모두 같은 크기 · 같은 자리 (색인 줄 자리는 색인이 없어도 비워 둠)
+const openBook = (top, left, right, tabs = "", folioL = "", folioR = "", cls = "") => `<div class="desk ob-desk${cls ? " " + cls : ""}">${top}
+  <div class="ob-wrap"><div class="ob-tabs">${tabs}</div>
     <div class="ob"><div class="ob-stack" aria-hidden="true"></div><div class="ob-pages">
       <aside class="ob-l paperink" aria-label="단계 구절표"><div class="ob-scroll" data-keep="l">${left}</div><div class="folio" aria-hidden="true">${folioL}</div></aside>
       <div class="ob-gutter" aria-hidden="true"></div>
@@ -296,7 +297,7 @@ function notePage(back, title, msg, action = "") {
 // ───────── 화면: 서재
 // ───────── 화면: 서재 — 펼친 책 (패드·컴퓨터: 두 쪽 펼침 / 폰: 한 쪽씩 넘기기)
 // 가로로 넓은 화면(패드 가로·컴퓨터·폰 가로)만 두 쪽 펼침, 세로 화면은 한 쪽씩
-const spreadMode = () => matchMedia("(min-width: 700px) and (orientation: landscape)").matches;
+const spreadMode = () => wide();
 const LIB = { vol: null, side: Number(pref("libSide", "0")) || 0 };
 
 async function libData(vol) {
@@ -372,7 +373,7 @@ async function viewLibrary() {
     S.weak = [];
     B.weakList(S.user.uid, 8).then((w) => { S.weak = w; if (w.length && !location.hash.replace(/^#\/?/, "")) render(); }).catch(() => {});
   }
-  const top = `<header class="lib-top">
+  const top = `<header class="top lib-top">
       <span class="lib-brand"><small>다니엘 아마츠</small><b>말씀암송 선포구절</b></span>
       <span style="display:flex">${S.admin ? `<a class="iconbtn" href="#/admin" aria-label="열람 허용 관리">${icon("users")}</a>` : ""}
       <a class="iconbtn" href="#/settings" aria-label="설정">${icon("gear")}</a>
@@ -401,16 +402,11 @@ async function viewLibrary() {
   }).join("");
   const contHref = D && D.cont ? `#/p/${vol}/${D.cont.st.num}/${D.cont.p.no}` : "#/";
   if (spreadMode()) {
-    $app.innerHTML = `<div class="lib">${top}
-      <div class="spread-wrap"><div class="spread">
-        <div class="sp-stack"></div>
-        <div class="sp-pages" id="libPages">
-          <section class="sp-left page-in" aria-label="단계와 진도">${D ? libStagesPage(vol, D) : ""}</section>
-          <div class="sp-gutter" aria-hidden="true"></div>
-          <section class="sp-right page-in" aria-label="이어서 외우기">${D ? libContPage(vol, D) : ""}</section>
-        </div>
-        <div class="side-tabs" role="tablist" aria-label="책 고르기">${tabs}</div>
-      </div></div></div>`;
+    // 본문 화면과 같은 펼친 책 — 책 고르기 색인은 왼쪽 쪽 위에
+    const nav = `<nav class="tabs-top mode-tabs book-tabs" role="tablist" aria-label="책 고르기">${tabs}</nav>`;
+    const left = D ? `<div class="ob-back ob-runhead">${esc(VOL_NAME[vol])} · 단계와 진도</div>${libStagesPage(vol, D)}` : "";
+    const right = D ? `<div class="page-in lib-cont">${libContPage(vol, D)}</div>` : "";
+    $app.innerHTML = openBook(top, `<div class="page-in">${left}</div>`, right, nav, esc(VOL_NAME[vol]), "이어서 외우기", "lib-ob");
   } else {
     const side = LIB.side;
     $app.innerHTML = `<div class="lib">${top}

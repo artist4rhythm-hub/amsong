@@ -149,6 +149,17 @@ export async function addMarks(uid, pid, marks, info) {
   }, { merge: true });
 }
 
+// 형광펜 · 밑줄 · 메모 (본문마다 한 문서): hl{낱말: 색} · ul{낱말: 색} · memo{절: 글}
+export async function getNotes(uid, pid) {
+  const s = await cacheFirst(doc(db, "amsong_users", uid, "notes", pid));
+  return s.exists() ? s.data() : null;
+}
+export const setNotes = (uid, pid, d) =>
+  setDoc(doc(db, "amsong_users", uid, "notes", pid), {
+    hl: d.hl || {}, ul: d.ul || {}, memo: d.memo || {},
+    ref: d.ref || "", vol: d.vol || "", num: d.num || 0, no: d.no || 0, updatedAt: serverTimestamp()
+  });
+
 export async function weakList(uid, n = 8) {
   const s = await getDocs(query(collection(db, "amsong_users", uid, "marks"), orderBy("total", "desc"), limit(n)));
   return s.docs.map((d) => ({ pid: d.id, ...d.data() })).filter((x) => (x.total || 0) > 0);

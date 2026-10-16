@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.3.0";
+const VERSION = "1.4.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "말씀 선포 1권", "2": "말씀 선포 2권", "3": "말씀 선포 3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -24,6 +24,9 @@ const MODES = [
 ];
 const MODE_TAB = { read: "#2F5D4E", hide: "#28554A", say: "#1F4A44", rec: "#16302A" };
 const MARKS = ["miss", "skip", "hes"];
+// 형광펜 · 밑줄 색 (겹쳐 쓸 수 있음: 한 낱말에 형광펜 하나 + 밑줄 하나)
+const HL = [["y", "노랑"], ["g", "연두"], ["b", "하늘"], ["p", "분홍"], ["o", "주황"]];
+const UL = [["r", "빨강"], ["b", "파랑"], ["g", "초록"], ["k", "검정"]];
 const MARK_LABEL = { miss: "틀림", skip: "빠뜨림", hes: "머뭇거림" };
 
 // ───────── 상태
@@ -46,7 +49,11 @@ const ICON = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4-6"/>',
-  home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'
+  home: '<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+  pen: '<path d="M4 20l4.5-1L19 8.5 15.5 5 5 15.5z"/><path d="M13.5 7l3.5 3.5"/>',
+  eraser: '<path d="M8 20h12"/><path d="M4.5 15.5l9-9 5 5-8.5 8.5H8.5z"/><path d="M9.5 10.5l5 5"/>',
+  note: '<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5"/><path d="M8.5 9h7M8.5 12.5h4"/>',
+  trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>'
 };
 const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 
@@ -110,6 +117,97 @@ const memorized = (pid) => !!(S.userDoc.memorized && S.userDoc.memorized[pid]);
 const memCount = (vol) => Object.keys(S.userDoc.memorized || {}).filter((k) => k.startsWith("v" + vol + "s")).length;
 const memCountStage = (vol, num) => Object.keys(S.userDoc.memorized || {}).filter((k) => k.startsWith(`v${vol}s${num}p`)).length;
 
+// ───────── 형광펜 · 밑줄 · 메모
+const PEN = { on: false, tool: pref("penTool", "hl:y") };
+const NOTES = {};          // 본문 id → { hl, ul, memo, info }
+const noteSaveT = {};
+function notesNow(pid) {
+  if (NOTES[pid]) return NOTES[pid];
+  const mine = NOTES[pid] = { hl: {}, ul: {}, memo: {}, info: null };
+  B.getNotes(S.user.uid, pid).then((d) => {
+    if (!d) return;
+    // 받아 오기 전에 이미 표시한 것이 있으면 그것을 위에 덮음
+    mine.hl = { ...(d.hl || {}), ...mine.hl };
+    mine.ul = { ...(d.ul || {}), ...mine.ul };
+    mine.memo = { ...(d.memo || {}), ...mine.memo };
+    const has = Object.keys(mine.hl).length || Object.keys(mine.ul).length || Object.keys(mine.memo).length;
+    if (has && S.ctx && S.ctx.p.id === pid && S.ctx.mode === "read" && S.view.memoEdit == null) refreshVerses();
+  }).catch(() => {});
+  return mine;
+}
+function saveNotes(pid) {
+  clearTimeout(noteSaveT[pid]);
+  noteSaveT[pid] = setTimeout(() => flushNotes(pid), 700);
+}
+function flushNotes(pid) {
+  clearTimeout(noteSaveT[pid]); delete noteSaveT[pid];
+  const n = NOTES[pid]; if (!n) return;
+  B.setNotes(S.user.uid, pid, { ...n, ...(n.info || {}) }).catch(() => toast("표시를 저장하지 못했어요. 인터넷 연결을 확인해 주세요."));
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) Object.keys(noteSaveT).forEach(flushNotes); });
+function curNotes() {
+  const c = S.ctx, n = notesNow(c.p.id);
+  n.info = { ref: c.p.ref, vol: c.vol, num: c.num, no: c.p.no };
+  return n;
+}
+// 본문 부분만 다시 그림 (화면 전체를 다시 그리지 않아 빠름)
+function refreshVerses() {
+  const c = S.ctx; if (!c || c.mode !== "read") return;
+  const box = document.querySelector(".verses[data-read]"); if (!box) return;
+  box.outerHTML = versesBox(c.p, c.weak, notesNow(c.p.id));
+  fitAll();
+  const ta = document.querySelector(".memo-edit textarea");
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function refreshPenBar() {
+  const bar = document.querySelector(".pen-bar, .pen-row"); if (!bar) return;
+  const hint = document.querySelector(".pb-hint"); if (hint) hint.remove();
+  bar.outerHTML = penBar();
+}
+
+// 낱말을 누르거나 쭉 그어서 표시 (손가락 · 펜 · 마우스)
+let drag = null;
+const paintSel = () => {
+  const lo = Math.min(drag.a, drag.b), hi = Math.max(drag.a, drag.b);
+  drag.all.forEach((x, i) => x.classList.toggle("sel", i >= lo && i <= hi));
+};
+document.addEventListener("pointerdown", (e) => {
+  if (!PEN.on || !S.ctx || S.ctx.mode !== "read") return;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const w = e.target.closest(".verses.pen [data-w]"); if (!w) return;
+  if (PEN.tool === "memo") { e.preventDefault(); S.view.memoEdit = Number(w.dataset.w.split("-")[0]); refreshVerses(); return; }
+  const all = [...document.querySelectorAll(".verses.pen [data-w]")];
+  drag = { all, a: all.indexOf(w), b: all.indexOf(w), id: e.pointerId };
+  paintSel();
+});
+document.addEventListener("pointermove", (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const w = el && el.closest && el.closest(".verses.pen [data-w]");
+  if (!w) return;
+  const i = drag.all.indexOf(w);
+  if (i >= 0 && i !== drag.b) { drag.b = i; paintSel(); }
+});
+document.addEventListener("pointerup", (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const d = drag; drag = null;
+  const lo = Math.min(d.a, d.b), hi = Math.max(d.a, d.b);
+  const keys = d.all.slice(lo, hi + 1).map((x) => x.dataset.w);
+  const n = curNotes(), [kind, col] = PEN.tool.split(":");
+  if (kind === "erase") keys.forEach((k) => { delete n.hl[k]; delete n.ul[k]; });
+  else {
+    const map = kind === "hl" ? n.hl : n.ul;
+    // 이미 모두 같은 색이면 지우고, 아니면 칠함
+    if (keys.every((k) => map[k] === col)) keys.forEach((k) => delete map[k]);
+    else keys.forEach((k) => { map[k] = col; });
+  }
+  saveNotes(S.ctx.p.id);
+  refreshVerses();
+});
+document.addEventListener("pointercancel", () => {
+  if (drag) { drag.all.forEach((x) => x.classList.remove("sel")); drag = null; }
+});
+
 // 단어 단위로 나누기 (줄 바꿈은 책 그대로)
 const words = (line) => line.split(" ").filter((w) => w.length);
 const weakSet = (m) => {
@@ -145,13 +243,14 @@ function topBar(title, back, extra = "") {
 const tome = (inner, tabs = "") =>
   `${tabs}<div class="tome${tabs ? " tabbed" : ""}"><div class="leaf paperink">${inner}</div></div>`;
 const deskPage = (top, body) => `<div class="desk">${top}<main class="desk-main">${body}</main></div>`;
-// 넓은 화면: 두 쪽 펼친 책 (왼쪽 구절표 · 오른쪽 본문)
-const openBook = (top, left, right, tabs = "") => `<div class="desk ob-desk">${top}
-  <div class="ob-wrap">${tabs ? `<div class="ob-tabs">${tabs}</div>` : ""}
-    <div class="ob"><div class="ob-stack"></div><div class="ob-pages">
-      <aside class="ob-l paperink" data-keep="l" aria-label="단계 구절표">${left}</aside>
+// 넓은 화면(패드 가로 · 컴퓨터): 좌우가 같은 두 쪽 펼친 책 (왼쪽 구절표 · 오른쪽 본문)
+// 쪽마다 따로 넘겨 보고, 아래 바깥쪽 모서리에 책처럼 쪽 표시
+const openBook = (top, left, right, tabs = "", folioL = "", folioR = "") => `<div class="desk ob-desk">${top}
+  <div class="ob-wrap${tabs ? " has-tabs" : ""}">${tabs ? `<div class="ob-tabs">${tabs}</div>` : ""}
+    <div class="ob"><div class="ob-stack" aria-hidden="true"></div><div class="ob-pages">
+      <aside class="ob-l paperink" aria-label="단계 구절표"><div class="ob-scroll" data-keep="l">${left}</div><div class="folio" aria-hidden="true">${folioL}</div></aside>
       <div class="ob-gutter" aria-hidden="true"></div>
-      <section class="ob-r paperink" data-keep="r">${right}</section>
+      <section class="ob-r paperink"><div class="ob-scroll" data-keep="r">${right}</div><div class="folio" aria-hidden="true">${folioR}</div></section>
     </div></div>
   </div></div>`;
 
@@ -388,7 +487,8 @@ function stageHead(vol, st, b) {
     <div class="meta">${esc(VOL_SHORT[vol])} · 본문 ${st.passages.length}개 · ${nverse}절 · 외운 본문 ${memCountStage(vol, st.num)}</div></div>`;
 }
 
-const wide = () => matchMedia("(min-width: 1000px)").matches;
+// 두 쪽 펼친 책은 가로로 넓은 화면(패드 가로 · 컴퓨터)에서만. 폰 · 패드 세로는 한 쪽씩 세로로 길게
+const wide = () => matchMedia("(min-width: 900px) and (orientation: landscape) and (min-height: 560px)").matches;
 
 async function viewStage(vol, num) {
   if (!canVol(vol)) return go("#/");
@@ -407,7 +507,8 @@ async function viewStage(vol, num) {
         <p class="muted">왼쪽 구절표에서 본문을 고르거나, 아직 외우지 않은 본문부터 시작하세요.</p>
         <div class="tools"><a class="btn" href="#/p/${vol}/${num}/${first.no}">${refHtml(first.ref)}부터 외우기 ${icon("next")}</a></div>
       </div>`;
-    $app.innerHTML = openBook(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol), leftPage(vol, st, null), right);
+    $app.innerHTML = openBook(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol), leftPage(vol, st, null), right, "",
+      `${esc(VOL_NAME[vol])}`, `${esc(st.label)}`);
     return;
   }
   $app.innerHTML = deskPage(topBar(`${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b>`, "#/b/" + vol),
@@ -449,13 +550,56 @@ function afterHtml(p) {
     : `<div class="pnote-box">${a.lines.map(esc).join("<br>")}</div>`).join("");
 }
 
-function versesRead(p, weak) {
-  return `<div class="verses" data-fit>${p.verses.map((v, vi) => `<div class="verse"><span class="vn">${v.n ?? ""}</span><div class="lines">
-    ${v.lines.map((l, li) => `<span class="ln">${words(l).map((w, wi) => {
-      const k = `${vi}-${li}-${wi}`;
-      return weak.has(k) ? `<span class="w weak">${esc(w)}</span>` : esc(w);
-    }).join(" ")}</span>`).join("")}</div></div>`).join("")}</div>
-    <div class="closing">— ${refHtml(p.ref)}</div>`;
+function versesRead(p, weak, nt) {
+  return versesBox(p, weak, nt) + `<div class="closing">— ${refHtml(p.ref)}</div>`;
+}
+
+// 낱말마다 형광펜(h-색) · 밑줄(u-색)을 붙이고, 이웃 낱말과 같은 색이면 사이 띄어쓰기도 이어 칠함
+function versesBox(p, weak, nt) {
+  const hl = nt.hl || {}, ul = nt.ul || {}, memo = nt.memo || {}, ed = S.view.memoEdit;
+  return `<div class="verses${PEN.on ? " pen" : ""}" data-fit data-read>${p.verses.map((v, vi) => `<div class="verse"><span class="vn">${v.n ?? ""}</span><div class="lines">
+    ${v.lines.map((l, li) => {
+      const ws = words(l);
+      return `<span class="ln">${ws.map((w, wi) => {
+        const k = `${vi}-${li}-${wi}`, k2 = `${vi}-${li}-${wi + 1}`;
+        const cls = ["w"];
+        if (weak.has(k)) cls.push("weak");
+        if (hl[k]) cls.push("h-" + hl[k]);
+        if (ul[k]) cls.push("u-" + ul[k]);
+        let sp = "";
+        if (wi < ws.length - 1) {
+          const sc = [];
+          if (hl[k] && hl[k] === hl[k2]) sc.push("h-" + hl[k]);
+          if (ul[k] && ul[k] === ul[k2]) sc.push("u-" + ul[k]);
+          sp = sc.length ? `<span class="sp ${sc.join(" ")}"> </span>` : " ";
+        }
+        return `<span class="${cls.join(" ")}" data-w="${k}">${esc(w)}</span>${sp}`;
+      }).join("")}</span>`;
+    }).join("")}
+    ${ed === vi ? `<div class="memo-edit"><textarea maxlength="1000" rows="3" placeholder="이 절에 메모를 적어요" aria-label="${esc(String(v.n ?? ""))}절 메모">${esc(memo[vi] || "")}</textarea>
+      <div class="me-btns"><button class="btn small" type="button" data-act="memosave" data-vi="${vi}">저장</button>
+      ${memo[vi] ? `<button class="btn ghost small" type="button" data-act="memodel" data-vi="${vi}">메모 지우기</button>` : ""}
+      <button class="btn ghost small" type="button" data-act="memocancel">닫기</button></div></div>`
+      : memo[vi] ? `<button type="button" class="memo-note" data-memo="${vi}" aria-label="메모 고치기">${icon("note")}<span>${esc(memo[vi])}</span></button>` : ""}
+    </div></div>`).join("")}</div>`;
+}
+
+// 형광펜 도구 줄 (읽기에서만)
+function penBar() {
+  if (!PEN.on) return `<div class="pen-row"><button type="button" class="pen-open" data-act="pen">${icon("pen")}<span>형광펜 · 밑줄 · 메모</span></button></div>`;
+  const kind = PEN.tool.split(":")[0];
+  const sw = (k, c, label) => `<button type="button" class="sw sw-${k} c-${c}" data-tool="${k}:${c}" aria-pressed="${PEN.tool === k + ":" + c}" aria-label="${k === "hl" ? "형광펜" : "밑줄"} ${label}"><i></i></button>`;
+  const tool = (t, ic, label) => `<button type="button" class="pb-tool" data-tool="${t}" aria-pressed="${PEN.tool === t}">${icon(ic)}<span>${label}</span></button>`;
+  const hint = kind === "erase" ? "지울 낱말을 누르거나 손가락으로 쭉 그으세요."
+    : kind === "memo" ? "메모를 달 절의 아무 낱말이나 누르세요."
+    : "낱말을 누르거나 옆으로 쭉 그어 표시해요. 같은 색으로 다시 그으면 지워지고, 형광펜과 밑줄은 겹쳐 쓸 수 있어요.";
+  return `<div class="pen-bar" role="toolbar" aria-label="형광펜 · 밑줄 · 메모">
+    <div class="pb-row pb-colors"><span class="pb-lab">형광펜</span>${HL.map(([c, l]) => sw("hl", c, l)).join("")}<span class="pb-sep"></span>
+      <span class="pb-lab">밑줄</span>${UL.map(([c, l]) => sw("ul", c, l)).join("")}</div>
+    <div class="pb-row">${tool("erase", "eraser", "지우개")}${tool("memo", "note", "메모")}
+      <button type="button" class="pb-tool" data-act="penclear" aria-label="표시 모두 지우기">${icon("trash")}<span><span class="pb-long">표시 </span>모두 지우기</span></button>
+      <button type="button" class="pb-done" data-act="pen">완료</button></div>
+  </div><p class="pb-hint">${hint}</p>`;
 }
 
 function maskWord(w, how) {
@@ -532,7 +676,7 @@ async function viewPassage(vol, num, no, q) {
 
   let body = "", side = "";
   if (mode === "read") {
-    body = versesRead(p, weak);
+    body = penBar() + versesRead(p, weak, notesNow(p.id));
     side = afterHtml(p);
   } else if (mode === "hide") {
     body = `<div class="tools" role="group" aria-label="가리는 방법">
@@ -572,16 +716,18 @@ async function viewPassage(vol, num, no, q) {
     ${themeBtn()}
   </header>`;
   if (isWide) {
-    $app.innerHTML = openBook(top, leftPage(vol, st, p.no), sheet + pager, modes);
+    const i = st.passages.findIndex((x) => x.no === p.no);
+    $app.innerHTML = openBook(top, leftPage(vol, st, p.no), sheet + pager, modes,
+      `${esc(VOL_SHORT[vol])} · ${esc(st.label)}`, `${i + 1} / ${st.passages.length}`);
     // 다른 단계에서 왔을 때만 왼쪽 구절표를 지금 본문 쪽으로 (같은 단계 안에서는 render가 위치 유지)
     if (S._keepL == null) {
-      const L = $app.querySelector(".ob-l"), cur = L && L.querySelector('[aria-current="true"]');
+      const L = $app.querySelector('[data-keep="l"]'), cur = L && L.querySelector('[aria-current="true"]');
       if (cur) L.scrollTop = Math.max(0, cur.offsetTop - L.clientHeight / 2);
     }
   } else {
     $app.innerHTML = deskPage(top, tome(sheet + pager, modes));
   }
-  S.ctx = { vol, num, p, st, mode, nb };
+  S.ctx = { vol, num, p, st, mode, nb, weak };
   fitAll();
   if (mode === "rec") wireRec();
 }
@@ -809,8 +955,10 @@ async function viewAdmin() {
 document.addEventListener("click", async (e) => {
   const nav = e.target.closest("a[data-nav]");
   if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
-  const t = e.target.closest("[data-act],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol]");
+  const t = e.target.closest("[data-act],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
   if (!t) return;
+  if (t.dataset.tool) { PEN.tool = t.dataset.tool; setPref("penTool", PEN.tool); S.view.memoEdit = null; refreshPenBar(); refreshVerses(); return; }
+  if (t.dataset.memo) { S.view.memoEdit = Number(t.dataset.memo); refreshVerses(); return; }
   if (t.dataset.libvol) {
     const v = t.dataset.libvol;
     if (v !== LIB.vol) libTurn(() => { LIB.vol = v; LIB.side = 0; setPref("libVol", v); setPref("libSide", "0"); });
@@ -857,6 +1005,23 @@ document.addEventListener("click", async (e) => {
     case "theme": toggleTheme(); break;
     case "libflip": libTurn(() => { LIB.side = LIB.side ? 0 : 1; setPref("libSide", String(LIB.side)); }); break;
     case "openall": v.openAll = !v.openAll; v.open = new Set(); render(); break;
+    case "pen": PEN.on = !PEN.on; v.memoEdit = null; refreshPenBar(); refreshVerses(); break;
+    case "penclear": {
+      const n = curNotes();
+      if (!Object.keys(n.hl).length && !Object.keys(n.ul).length) { toast("지울 표시가 없어요"); break; }
+      if (!confirm("이 본문의 형광펜과 밑줄을 모두 지울까요? (메모는 남아요)")) break;
+      n.hl = {}; n.ul = {}; saveNotes(S.ctx.p.id); refreshVerses(); toast("표시를 모두 지웠어요");
+      break;
+    }
+    case "memosave": case "memodel": {
+      const n = curNotes(), vi = t.dataset.vi;
+      const ta = document.querySelector(".memo-edit textarea");
+      const text = t.dataset.act === "memosave" && ta ? ta.value.trim() : "";
+      if (text) n.memo[vi] = text; else delete n.memo[vi];
+      v.memoEdit = null; saveNotes(S.ctx.p.id); refreshVerses();
+      break;
+    }
+    case "memocancel": v.memoEdit = null; refreshVerses(); break;
     case "memo": {
       const id = S.ctx.p.id, on = !memorized(id);
       S.userDoc.memorized = S.userDoc.memorized || {};
@@ -915,6 +1080,7 @@ document.addEventListener("touchend", (e) => {
   }
   if (!S.ctx || !location.hash.startsWith("#/p/")) return;
   if (Math.abs(dx) < 80 || Math.abs(dy) > 50 || S.ctx.mode === "rec") return;
+  if (PEN.on && S.ctx.mode === "read") return;
   const n = dx < 0 ? S.ctx.nb.next : S.ctx.nb.prev;
   if (n) location.replace(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
 }, { passive: true });
@@ -979,6 +1145,7 @@ async function render() {
 
 // ───────── 시작
 async function boot(user) {
+  Object.keys(NOTES).forEach((k) => delete NOTES[k]);
   S.user = user; S.allow = null; S.admin = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
   if (!user) return render();
   // 열람 허용과 내 기록을 한꺼번에 받아 시작을 빠르게
@@ -1003,4 +1170,13 @@ B.onAuth((u) => boot(u));
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  // 새 버전을 올리면: 기기가 새 파일을 받자마자 한 번 새로고침해서 바로 새 화면으로
+  const hadController = !!navigator.serviceWorker.controller;
+  let swReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || swReloaded) return;
+    swReloaded = true;
+    Object.keys(noteSaveT).forEach(flushNotes);
+    setTimeout(() => location.reload(), 300);
+  });
 }

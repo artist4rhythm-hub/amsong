@@ -27,12 +27,14 @@
       if (bar[t]) document.getElementById('themeColor').setAttribute('content', bar[t]);
       document.documentElement.setAttribute('data-theme', t);
       var s = localStorage.getItem('amsong.size');
-      if (s) document.documentElement.style.setProperty('--fs-scale', s);
+      if (s) document.documentElement.style.setProperty('--fs-scale', Math.min(1, Number(s) || 1));
+      if (localStorage.getItem('amsong.stars') !== 'off') document.documentElement.classList.add('stars');
     } catch (e) {}
   })();
 </script>
 </head>
 <body>
+<div id="sky" aria-hidden="true"></div>
 <div id="app" aria-live="polite">
   <div class="boot"><span class="boot-mark"></span><span>말씀암송 선포구절</span></div>
 </div>

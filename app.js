@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.8.0";
+const VERSION = "1.9.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -70,6 +70,9 @@ const MODES = [
 ];
 const MODE_TAB = { read: "#2F5D4E", hide: "#28554A", say: "#1F4A44", rec: "#16302A" };
 const MARKS = ["miss", "skip", "hes"];
+// 가리는 방법 (고른 방법은 기기에 기억)
+const HIDES = [["first", "낱말 첫 글자"], ["verse", "절 첫 글자"], ["all", "모두 가리기"], ["weak", "자주 틀린 곳만"]];
+const hideNow = () => { const h = pref("hide", "first"); return HIDES.some((x) => x[0] === h) ? h : "first"; };
 // 형광펜 · 밑줄 색 (겹쳐 쓸 수 있음: 한 낱말에 형광펜 하나 + 밑줄 하나)
 const HL = [["y", "노랑"], ["g", "연두"], ["b", "하늘"], ["p", "분홍"], ["o", "주황"]];
 const UL = [["r", "빨강"], ["b", "파랑"], ["g", "초록"], ["k", "검정"]];
@@ -120,6 +123,9 @@ const THEMES = [
   { id: "contrast", label: "선명하게", desc: "흰 종이 · 검은 굵은 글자", desk: "#E6E8E6", paper: "#FFFFFF", ink: "#000000" },
   { id: "auto", label: "기기 설정 따라", desc: "낮에는 크림 북, 밤(어두운 모드)에는 밤 읽기", desk: "#EFE8D9", paper: "#1B2420", ink: "#E8E2D2" },
 ];
+// 본문 글자 크기: 책자 그대로(1)가 가장 크고 기본. 예전에 '크게'를 골랐던 기기도 책자 그대로로
+const SIZES = [["1", "책자 그대로"], ["0.92", "조금 작게"], ["0.85", "작게"], ["0.78", "더 작게"], ["0.7", "아주 작게"]];
+const sizeNow = () => { const v = pref("size", "1"); return SIZES.some((x) => x[0] === v) ? v : (Number(v) > 1 ? "1" : v === "0.9" ? "0.92" : "1"); };
 const THEME_BAR = { cream: "#EFE8D9", dark: "#132A24", night: "#0C1311", warm: "#E3D5B8", contrast: "#E6E8E6" };
 function applyTheme() {
   let t = pref("theme", "cream");
@@ -127,9 +133,38 @@ function applyTheme() {
   if (!THEME_BAR[t]) t = "cream";
   document.documentElement.setAttribute("data-theme", t);
   document.getElementById("themeColor").setAttribute("content", THEME_BAR[t]);
-  document.documentElement.style.setProperty("--fs-scale", pref("size", "1"));
+  document.documentElement.style.setProperty("--fs-scale", sizeNow());
+  document.documentElement.classList.toggle("stars", pref("stars", "on") !== "off");
 }
 const curTheme = () => document.documentElement.getAttribute("data-theme");
+// 별빛 배경: 반짝이는 별 + 가끔 떨어지는 별똥별 (교사 선교사 로그인 하늘과 같은 방식, 더 잔잔하게)
+// 한 번만 만들어 두고 화면을 바꿔도 그대로 — 움직임은 투명도·위치만 바꿔서 폰에서도 가볍게
+function buildSky() {
+  const sky = document.getElementById("sky");
+  if (!sky || sky.childElementCount) return;
+  const small = Math.min(window.innerWidth, window.innerHeight) < 600;
+  let h = '<div class="way"></div><div class="glow"></div>';
+  const n = small ? 42 : 70;
+  for (let i = 0; i < n; i++) {
+    const x = (Math.random() * 100).toFixed(2), y = (Math.pow(Math.random(), 1.35) * 100).toFixed(2), r = Math.random();
+    const sz = r > 0.93 ? 2.6 : r > 0.75 ? 1.8 : 1.15, big = r > 0.955;
+    const tw = (2.6 + Math.random() * 3.6).toFixed(2), dl = (Math.random() * 5).toFixed(2);
+    const o1 = (0.1 + Math.random() * 0.22).toFixed(2), o2 = (0.65 + Math.random() * 0.35).toFixed(2);
+    h += `<span class="st${big ? " big" : ""}" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;--tw:${tw}s;--dl:${dl}s;--o1:${o1};--o2:${o2}"></span>`;
+  }
+  // 별똥별: 한 줄기가 2초쯤 지나가고 한동안 쉼 → 화면 어딘가에서 몇 초에 한 번씩
+  [{ x: -4, y: -3, d: 11, dl: 1.2, tail: 180, dx: 600, dy: 248 }, { x: 36, y: -6, d: 13, dl: 5.5, tail: 150, dx: 520, dy: 215 },
+   { x: 66, y: 2, d: 12, dl: 9.4, tail: 200, dx: 640, dy: 265 }, { x: 14, y: 30, d: 14, dl: 13.6, tail: 140, dx: 480, dy: 198 }]
+    .forEach((c) => { h += `<span class="sh" style="left:${c.x}%;top:${c.y}%;--sd:${c.d}s;--sdl:${c.dl}s;--tail:${c.tail}px;--dx:${c.dx}px;--dy:${c.dy}px"></span>`; });
+  sky.innerHTML = h;
+}
+// 폰에서 본문을 읽는 중에는 종이가 화면을 거의 다 덮으므로 별을 멈춰 둠 (넘길 때 매끄럽게)
+function skyQuiet() {
+  const r = location.hash.replace(/^#\/?/, "").split("/")[0];
+  const quiet = (r === "p" && !wide()) || (S.ctx && S.ctx.mode === "rec" && r === "p");
+  document.documentElement.classList.toggle("sky-quiet", !!quiet);
+}
+
 // 머리줄의 화면 모드 단추 → 작은 고르기 창
 function closeThemePop() { const p = document.getElementById("themePop"); if (p) p.remove(); }
 function openThemePop() {
@@ -753,6 +788,8 @@ function hideLine(p, weak, v, vi, li, pfx = "") {
   if (v.open.has(key) || v.openAll) return `<span class="ln masked" data-u="${vi}-${li}" data-line="${key}" role="button" tabindex="0" aria-label="이 줄 다시 가리기">${esc(l)}</span>`;
   const ws = words(l).map((w, wi) => {
     const k = `${vi}-${li}-${wi}`;
+    // 절 첫 글자: 그 절의 맨 첫 글자 하나만 보이고 나머지는 모두 가림
+    if (how === "verse") return li === 0 && wi === 0 ? esc(w[0]) + (w.length > 1 ? maskWord(w.slice(1), "all") : "") : maskWord(w, "all");
     if (how === "weak") return weak.has(k) ? maskWord(w, "first") : esc(w);
     return maskWord(w, how);
   }).join(" ");
@@ -797,7 +834,7 @@ async function viewPassage(vol, num, no, q) {
   const key = `${vol}/${num}/${p.no}/${mode}`;
   if (S.view.key !== key) {
     if (S.cleanup) { S.cleanup(); S.cleanup = null; }
-    S.view = { key, open: new Set(), openAll: false, hide: S.view.hide || "first", say: 0, rec: "idle", marks: {}, result: null };
+    S.view = { key, open: new Set(), openAll: false, hide: hideNow(), say: 0, rec: "idle", marks: {}, result: null };
   }
   const v = S.view;
   const m = marksNow(p.id);
@@ -818,11 +855,7 @@ async function viewPassage(vol, num, no, q) {
     body = penBar() + versesRead(p, weak, notesNow(p.id));
     side = afterHtml(p);
   } else if (mode === "hide") {
-    body = `<div class="tools" role="group" aria-label="가리는 방법">
-      ${[["first", "첫 글자"], ["all", "모두 가리기"], ["weak", "자주 틀린 곳만"]].map(([id, lb]) =>
-        `<button class="chip" type="button" data-hide="${id}" aria-pressed="${v.hide === id}">${lb}</button>`).join("")}
-      <button class="chip" type="button" data-act="openall" aria-pressed="${v.openAll}">${v.openAll ? "다시 가리기" : "모두 열기"}</button>
-    </div>${versesHide(p, weak, v)}
+    body = `${hideChips(v)}${versesHide(p, weak, v)}
     <p class="hint">줄을 누르면 그 줄이 열리고, 다시 누르면 가려져요.${v.hide === "weak" && !weak.size ? " 아직 자주 틀린 곳 기록이 없어요. 녹음 채점을 해 보세요." : ""}</p>`;
     side = afterHtml(p);
   } else if (mode === "say") {
@@ -1022,7 +1055,7 @@ const bkTop = (vol, st) => `<header class="top">
     ${themeBtn()}
   </header>`;
 const hideChips = (v) => `<div class="tools" role="group" aria-label="가리는 방법">
-    ${[["first", "첫 글자"], ["all", "모두 가리기"], ["weak", "자주 틀린 곳만"]].map(([id, lb]) =>
+    ${HIDES.map(([id, lb]) =>
       `<button class="chip" type="button" data-hide="${id}" aria-pressed="${v.hide === id}">${lb}</button>`).join("")}
     <button class="chip" type="button" data-act="openall" aria-pressed="${v.openAll}">${v.openAll ? "다시 가리기" : "모두 열기"}</button></div>`;
 
@@ -1251,7 +1284,7 @@ async function viewList(vol, num, k) {
 
 // ───────── 설정
 function viewSettings() {
-  const theme = pref("theme", "cream"), size = pref("size", "1"), mode = pref("mode", "read");
+  const theme = pref("theme", "cream"), size = sizeNow(), mode = pref("mode", "read");
   const opt = (name, val, cur, label) => `<button class="chip" type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${label}</button>`;
   $app.innerHTML = deskPage(topBar("<b>설정</b>", "#/"), tome(`
     <div class="page-h"><span class="kicker">설정</span><h1>나에게 맞게</h1></div>
@@ -1259,7 +1292,11 @@ function viewSettings() {
         <span class="tp-sw" style="background:${t.desk}"><i style="background:${t.paper};color:${t.ink}">가</i></span>
         <span class="tp-tx"><b>${t.label}</b><small>${t.desc}</small></span>${t.id === theme ? icon("check", "i tp-ck") : ""}</button>`).join("")}</div>
       <p>화면 모드는 기기마다 따로 기억해요. 폰은 밤 읽기, 패드는 크림 북처럼 쓸 수 있어요. 위쪽 반달 단추로도 바로 바꿀 수 있어요.</p></div>
-    <div class="field"><b>본문 글자 크기</b><div class="opts">${opt("size", "0.9", size, "작게")}${opt("size", "1", size, "보통")}${opt("size", "1.15", size, "크게")}${opt("size", "1.3", size, "아주 크게")}</div></div>
+    <div class="field"><b>본문 글자 크기</b><div class="opts">${SIZES.map(([val, lb]) => opt("size", val, size, lb)).join("")}</div>
+      <div class="size-demo paperink"><span class="ln">태초에 하나님이 천지를 창조하시니라</span></div>
+      <p>'책자 그대로'가 기본이고 가장 커요. 작게 할수록 한 쪽에 더 많은 줄이 들어가요. 기기마다 따로 기억해요.</p></div>
+    <div class="field"><b>별빛 배경</b><div class="opts">${opt("stars", "on", pref("stars", "on"), "켜기")}${opt("stars", "off", pref("stars", "on"), "끄기")}</div>
+      <p>책상 바탕에 별빛이 반짝이고 가끔 별똥별이 지나가요. 오래된 폰에서 느리면 꺼 주세요.</p></div>
     <div class="field"><b>본문을 열 때 기본 방식</b><div class="opts">${MODES.map((m) => opt("mode", m.id, mode, m.label)).join("")}</div></div>
     <div class="field"><b>계정</b><p>${esc(S.user.email)}</p><div class="opts"><button class="btn ghost small" type="button" data-act="signout">나가기</button></div></div>
     <p class="muted colo">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>`));
@@ -1357,7 +1394,7 @@ document.addEventListener("click", async (e) => {
     t.outerHTML = hideLine(pp, weakSet(S.marks[pid]), v, vi, li, bar >= 0 ? pid + "|" : "");
     return;
   }
-  if (t.dataset.hide) { v.hide = t.dataset.hide; v.open = new Set(); v.openAll = false; return render(); }
+  if (t.dataset.hide) { v.hide = t.dataset.hide; setPref("hide", v.hide); v.open = new Set(); v.openAll = false; return render(); }
   if (t.dataset.say) {
     const d = Number(t.dataset.say);
     v.say = d === 0 ? 0 : Math.max(0, (v.say || 0) + d);
@@ -1503,7 +1540,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { 
 let rendering = 0;
 async function render() {
   const my = ++rendering;
-  if (!S.user) return viewLogin();
+  if (!S.user) { document.documentElement.classList.remove("sky-quiet"); return viewLogin(); }
   if (!S.allow && !S.admin) return viewPending();
   const { parts, q } = parseHash();
   // 같은 화면을 다시 그릴 때는 스크롤 위치 유지, 다른 화면으로 가면 맨 위로
@@ -1537,6 +1574,7 @@ async function render() {
       '<a class="btn" href="#/">서재로</a>');
   }
   if (my !== rendering) return;
+  skyQuiet();
   window.scrollTo(0, sameRoute ? keepY : 0);
   const nl = document.querySelector('[data-keep="l"]'), nr = document.querySelector('[data-keep="r"]');
   if (nl && S._keepL != null) nl.scrollTop = S._keepL;
@@ -1566,6 +1604,7 @@ async function boot(user) {
 }
 
 applyTheme();
+buildSky();
 B.onAuth((u) => boot(u));
 
 if ("serviceWorker" in navigator) {

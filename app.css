@@ -901,3 +901,148 @@ html.sky-quiet #sky .sh { opacity: 0; }
 /* 설정: 글자 크기 미리보기 */
 .size-demo { margin-top: 10px; padding: 12px 16px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); }
 .size-demo .ln { font-family: var(--serif); font-size: var(--fs); line-height: 1.72; display: block; }
+
+/* ═════════ 2.0 관리 (사람 · 열람 요청 · 접속 통계 · 아침 알림) ═════════ */
+.adm-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 18px 0 4px; padding-bottom: 4px; scrollbar-width: none; }
+.adm-tabs::-webkit-scrollbar { display: none; }
+.adm-tab { flex: none; min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1px solid var(--line); background: transparent; color: var(--sub); font: inherit; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; text-decoration: none; cursor: pointer; }
+.adm-tab small { font-weight: 500; opacity: .8; }
+.adm-tab[aria-selected="true"] { background: var(--btn); border-color: var(--btn); color: var(--btnink); }
+.badge { font-style: normal; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: #C2410C; color: #FFFFFF; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.adm-body { padding-top: 12px; }
+.adm-body input[type="text"], .adm-body input[type="email"], .adm-body input[type="search"], .adm-body input[type="time"], .adm-body select, .adm-body textarea, .req-form input {
+  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font: inherit; font-size: 15px; }
+.adm-body textarea { min-height: 72px; resize: vertical; line-height: 1.5; }
+.adm-body label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--sub); }
+.adm-body label small { font-size: 12px; color: var(--sub); opacity: .85; }
+.adm-body .checks label { flex-direction: row; font-size: 15px; color: var(--ink); }
+.adm-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.adm-add { margin: 0 0 14px; }
+.g2, .g3 { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 600px) { .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn.danger { color: #B42318; border-color: #EBC9C3; }
+.adm-tools { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 4px; }
+.adm-tools select { width: auto; }
+.grp-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 10px 0 6px; }
+.grp-chips .chip small { opacity: .75; margin-left: 2px; }
+.pp-all { flex-direction: row !important; align-items: center; gap: 6px !important; margin-left: auto; font-size: 13px; min-height: 40px; }
+.pp-all input, .pp-ck input { width: 20px; height: 20px; accent-color: var(--acc); }
+.sel-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px calc(-1 * var(--lpx)) 6px; padding: 10px var(--lpx); background: var(--band); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sel-bar .sb-g { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sel-bar input[type="text"] { width: 130px; min-height: 40px; }
+.sel-bar .checks { gap: 8px; }
+.pp-list { border-top: 1px solid var(--line); }
+.pp { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 4px 6px; border-bottom: 1px solid var(--line2); }
+.pp.open { background: var(--surf2); border-bottom: 0; }
+.pp-ck { display: flex; align-items: center; justify-content: center; min-height: 52px; cursor: pointer; }
+.pp-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; min-height: 56px; padding: 8px 2px; border: 0; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.pp-n { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
+.pp-n b { font-size: 15.5px; }
+.pp-n small { font-size: 12.5px; color: var(--sub); }
+.gb { font-style: normal; font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 3px; background: var(--band); color: var(--bandink); }
+.gb.ad { background: var(--box); color: var(--boxink); }
+.pp-e { font-size: 12.5px; color: var(--sub); word-break: break-all; }
+.pp-seen { display: flex; flex-direction: column; align-items: flex-end; font-size: 12.5px; color: var(--ink); padding-right: 4px; text-align: right; white-space: nowrap; }
+.pp-seen small { font-size: 11.5px; color: var(--sub); }
+.never { color: #B45309 !important; }
+.pp-edit { display: grid; gap: 10px; padding: 4px 12px 16px 40px; background: var(--surf2); border-bottom: 1px solid var(--line); }
+.pp-info { font-size: 12.5px; margin: 0; }
+.adm-empty { padding: 18px 0; line-height: 1.7; }
+.howto { margin-top: 8px; padding: 14px 16px; border-radius: 8px; background: var(--surf2); border: 1px solid var(--line); font-size: 14px; line-height: 1.7; }
+.howto summary { cursor: pointer; font-weight: 700; color: var(--pri); min-height: 32px; }
+.howto ol { margin: 8px 0 6px; padding-left: 22px; }
+.howto li { margin: 6px 0; }
+.howto code { font-size: 12.5px; padding: 1px 5px; border-radius: 3px; background: var(--chip); word-break: break-all; }
+.rq { display: grid; gap: 10px; padding: 14px 0 16px; border-bottom: 1px solid var(--line); }
+.rq-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.rq-h b { font-size: 16px; }
+.rq-h span { font-size: 12.5px; color: var(--sub); word-break: break-all; }
+.rq-note { flex-basis: 100%; margin: 2px 0 0; font-size: 14px; color: var(--ink); }
+.rq-f { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+/* 통계 */
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 700px) { .tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.tile { padding: 12px 14px; border-radius: 8px; background: var(--surf2); border: 1px solid var(--line); display: flex; flex-direction: column; }
+.tile small { font-size: 12px; color: var(--sub); }
+.tile b { font-size: 28px; line-height: 1.25; color: var(--pri); font-variant-numeric: tabular-nums; }
+.tile span { font-size: 12px; color: var(--sub); }
+.chart { margin: 8px 0 0; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .grid line { stroke: var(--line); stroke-width: 1; }
+.chart .grid text, .chart .ticks text { font-size: 10px; fill: var(--sub); font-family: 'IBM Plex Sans KR', sans-serif; }
+.chart .bars path { fill: var(--acc); }
+.chart .bar .hit { fill: transparent; }
+.chart .bar:hover path, .chart .bar:focus path { fill: var(--pri); }
+.chart .bar:hover .hit, .chart .bar:focus .hit { fill: var(--line2); }
+.chart .bar:focus { outline: none; }
+.chart figcaption { font-size: 12px; margin-top: 6px; }
+.daytable { margin-top: 8px; font-size: 13px; }
+.daytable summary { cursor: pointer; color: var(--sub); min-height: 32px; }
+.st-wrap { overflow-x: auto; }
+.st-t { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 4px; }
+.st-t th, .st-t td { padding: 9px 6px; border-bottom: 1px solid var(--line2); text-align: left; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.st-t thead th { font-size: 12px; color: var(--sub); font-weight: 600; }
+.st-t td small { color: var(--sub); }
+.st-t td.ref { white-space: normal; color: var(--sub); font-size: 12.5px; min-width: 120px; }
+.nm-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.nm { display: inline-flex; align-items: baseline; gap: 4px; padding: 4px 10px; border-radius: 14px; background: var(--chip); font-size: 13.5px; }
+.nm small { font-size: 11.5px; color: var(--sub); }
+.st-t .nm { background: none; padding: 0; }
+.st-note { margin-top: 18px; font-size: 12.5px; }
+/* 알림 */
+.ok-box { padding: 12px 14px; border-radius: 8px; background: var(--band); color: var(--bandink); font-size: 14px; line-height: 1.6; margin-bottom: 10px; }
+.ok-box b { display: block; }
+.ok-box.warn { background: var(--note); color: var(--noteink); }
+.al { display: grid; gap: 10px; padding: 14px; margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surf2); }
+.al-h { display: flex; align-items: center; gap: 10px; }
+.al-h input[type="time"] { width: 150px; font-size: 17px; font-weight: 700; padding: 6px 10px; }
+.al-h .btn { margin-left: auto; }
+.sw { flex-direction: row !important; align-items: center; gap: 8px !important; font-size: 14px !important; color: var(--ink) !important; min-height: 44px; }
+.sw input { width: 22px; height: 22px; accent-color: var(--acc); }
+.sw span { white-space: nowrap; }
+.adm-top { margin-top: 0; }
+.al-days { display: flex; flex-wrap: wrap; gap: 6px; }
+.al-days .chip { min-width: 40px; padding: 0 10px; }
+.al-prev { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(250, 250, 250, .92); color: #1F2320; box-shadow: 0 4px 16px rgba(0, 0, 0, .12); font-size: 13.5px; line-height: 1.4; }
+.al-prev img { width: 36px; height: 36px; border-radius: 8px; flex: none; }
+.al-prev span { display: flex; flex-direction: column; min-width: 0; }
+.al-prev b { font-size: 14px; }
+/* 설정 · 설치 · 요청 */
+.warn-t { color: var(--noteink) !important; background: var(--note); padding: 8px 12px; border-radius: 6px; }
+.on-pill { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 12px; border-radius: 20px; background: var(--band); color: var(--bandink); font-size: 14px; font-weight: 700; }
+.on-pill svg { width: 16px; height: 16px; }
+.devs { display: flex; flex-wrap: wrap; gap: 6px; }
+.dev { display: inline-flex; align-items: center; gap: 2px; padding-left: 12px; border-radius: 20px; background: var(--chip); font-size: 13px; }
+.dev small { color: var(--sub); }
+.dev .iconbtn { width: 36px; height: 36px; }
+.dev .iconbtn svg { width: 16px; height: 16px; }
+.inst-url { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 8px 8px 14px; border-radius: 8px; background: var(--surf2); border: 1px solid var(--line); font-size: 13.5px; word-break: break-all; }
+.inst-url span { flex: 1 1 auto; min-width: 0; }
+.inst-btn { width: 100%; margin-top: 12px; }
+.inst-btn[hidden] { display: none; }
+.steps { list-style: none; margin: 10px 0 0; padding: 0; }
+.steps li { display: flex; gap: 12px; padding: 14px 2px; border-bottom: 1px solid var(--line2); }
+.steps .no { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--band); color: var(--bandink); font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.steps li > span:last-child { display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.steps li > span:last-child > b { font-weight: 500; }
+.steps b b { font-weight: 800; color: var(--pri); }
+.steps small { font-size: 13px; color: var(--sub); }
+.tip { margin: 12px 0 0; padding: 10px 12px; border-radius: 6px; background: var(--note); color: var(--noteink); font-size: 13.5px; }
+.faq { margin-top: 22px; font-size: 14px; }
+.faq b { display: block; margin-top: 12px; color: var(--pri); }
+.faq p { margin: 2px 0 0; color: var(--sub); }
+.req-form { display: grid; gap: 12px; margin-top: 18px; }
+.req-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--sub); }
+.req-form .mail { margin-top: 0; }
+.req-form .actions { margin-top: 8px; }
+.gate .mail small { font-weight: 400; color: var(--sub); }
+.gate-link { display: inline-block; margin-top: 18px; font-size: 14px; color: var(--acc); font-weight: 600; text-decoration: none; min-height: 32px; }
+.cover-gate .gate-link { margin-top: 2px; }
+/* 책장 위 작은 안내 띠 */
+.nudge { display: flex; align-items: center; gap: 10px; margin: 14px 4px 0; padding: 8px 4px 8px 14px; border-radius: 10px; background: var(--surf); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-size: 13.5px; line-height: 1.45; }
+.nudge span { flex: 1 1 auto; min-width: 0; }
+.nudge .btn { flex: none; }
+.nudge .iconbtn { flex: none; width: 40px; height: 40px; color: var(--sub); }
+.nudge .iconbtn svg { width: 18px; height: 18px; }
+@media (min-width: 900px) and (min-height: 600px) { .nudge { margin-left: 56px; margin-right: 56px; } }

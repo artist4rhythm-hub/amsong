@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "1.9.0";
+const VERSION = "2.0.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -104,7 +104,8 @@ const ICON = {
   eraser: '<path d="M8 20h12"/><path d="M4.5 15.5l9-9 5 5-8.5 8.5H8.5z"/><path d="M9.5 10.5l5 5"/>',
   note: '<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5"/><path d="M8.5 9h7M8.5 12.5h4"/>',
   trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
-  close: '<path d="M6 6l12 12M18 6L6 18"/>'
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>'
 };
 const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 
@@ -394,22 +395,171 @@ function viewLogin() {
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A24 24 0 0 0 0 24c0 3.9.9 7.5 2.7 10.7l7.8-6z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.7l-7.8 6C6.6 42.6 14.6 48 24 48z"/></svg>
         구글 계정으로 들어가기
       </button>
-      <span class="gate-note">등록된 구글 계정으로 들어와 주세요</span>
+      <span class="gate-note">구글 계정으로 들어온 뒤 이름을 적어 열람 요청을 보내 주세요</span>
+      <a class="gate-link" href="#/install">홈 화면에 앱으로 설치하는 법 ›</a>
     </div>
   </main>`;
 }
 
-function viewPending() {
+// ───────── 이 기기 알아보기 (설치 안내 · 알림)
+function envInfo() {
+  const ua = navigator.userAgent || "";
+  const ipad = /iPad/.test(ua) || (navigator.platform === "MacIntel" && (navigator.maxTouchPoints || 0) > 1);
+  const ios = ipad || /iPhone|iPod/.test(ua), android = /Android/i.test(ua);
+  let app = false; try { app = !!(matchMedia("(display-mode: standalone)").matches || navigator.standalone); } catch (e) {}
+  const inApp = /KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|DaumApps|everytimeApp|; wv\)/i.test(ua);
+  const vm = /OS (\d+)[_.](\d+)/.exec(ua), iosVer = ios && vm ? Number(vm[1]) + Number(vm[2]) / 100 : 0;
+  const browser = /KAKAOTALK/i.test(ua) ? "카카오톡 안 브라우저" : /NAVER\(inapp/i.test(ua) ? "네이버 앱 안 브라우저" : inApp ? "앱 안 브라우저"
+    : /SamsungBrowser/i.test(ua) ? "삼성 인터넷" : /Whale/i.test(ua) ? "웨일" : /Edg\//.test(ua) ? "엣지" : /CriOS|Chrome/i.test(ua) ? "크롬" : /FxiOS|Firefox/i.test(ua) ? "파이어폭스" : /Safari/i.test(ua) ? "사파리" : "브라우저";
+  const kind = ios ? (ipad ? "ipad" : "iphone") : android ? "android" : "pc";
+  const name = kind === "iphone" ? "아이폰" : kind === "ipad" ? "아이패드" : kind === "android" ? "안드로이드" : /Mac/.test(ua) ? "맥" : /Win/.test(ua) ? "윈도우" : "컴퓨터";
+  const pushable = typeof window.Notification === "function" && "serviceWorker" in navigator && "PushManager" in window;
+  return { ios, ipad, android, app, inApp, iosVer, browser, kind, name, pushable, label: name + " · " + (app ? "홈 화면 앱" : browser) };
+}
+// 안드로이드 · 컴퓨터 크롬: 브라우저가 주는 '앱 설치' 창을 기억해 두었다가 단추로 띄움
+let BIP = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); BIP = e; document.querySelectorAll("[data-act='install']").forEach((b) => { b.hidden = false; }); });
+window.addEventListener("appinstalled", () => { BIP = null; setPref("installed", "1"); });
+
+// ───────── 화면: 홈 화면에 설치하는 법 (로그인 전에도 볼 수 있음)
+function viewInstall() {
+  const E = envInfo(), url = location.origin + location.pathname.replace(/index\.html$/, "");
+  const tab = S.instTab || (E.ios ? "ios" : E.android ? "android" : "pc");
+  const step = (n, t, d = "") => `<li><span class="no">${n}</span><span><b>${t}</b>${d ? `<small>${d}</small>` : ""}</span></li>`;
+  const panes = {
+    ios: `<ol class="steps">${step(1, "<b>사파리</b>로 앱 주소를 엽니다", "카톡에서 열렸다면 오른쪽 아래 ··· → '다른 브라우저로 열기' (또는 주소 복사 → 사파리에 붙여 넣기)")}
+      ${step(2, "아래쪽(아이패드는 위쪽) <b>공유 단추</b>를 누릅니다", "네모 위로 화살표가 나온 모양 ⬆︎")}
+      ${step(3, "목록을 내려 <b>'홈 화면에 추가'</b>를 누릅니다", "안 보이면 맨 아래 '동작 편집'에서 추가할 수 있어요")}
+      ${step(4, "오른쪽 위 <b>'추가'</b>를 누르면 끝", "홈 화면에 금빛 '말' 아이콘 <b>말씀선포</b>가 생겨요")}</ol>
+      <p class="tip">아이폰 · 아이패드는 <b>홈 화면에 추가한 앱</b>에서만 아침 알림을 받을 수 있어요. (iOS 16.4 이상)</p>`,
+    android: `<ol class="steps">${step(1, "<b>크롬</b>(또는 삼성 인터넷)으로 앱 주소를 엽니다", "카톡에서 열렸다면 오른쪽 위 ⋮ → '다른 브라우저로 열기'")}
+      ${step(2, "아래 <b>[앱 설치]</b> 단추를 누르거나, 오른쪽 위 <b>⋮ 메뉴</b>를 누릅니다", "삼성 인터넷은 아래쪽 ≡ 메뉴")}
+      ${step(3, "<b>'앱 설치'</b> 또는 <b>'홈 화면에 추가'</b>를 누릅니다", "삼성 인터넷: '현재 페이지 추가' → '홈 화면'")}
+      ${step(4, "<b>'설치'</b>를 누르면 끝", "홈 화면(앱 목록)에 <b>말씀선포</b>가 생겨요")}</ol>`,
+    pc: `<ol class="steps">${step(1, "<b>크롬</b>이나 <b>엣지</b>로 앱 주소를 엽니다")}
+      ${step(2, "아래 <b>[앱 설치]</b> 단추를 누르거나, 주소창 오른쪽 끝의 <b>설치 아이콘</b>(화면에 화살표)을 누릅니다", "맥 사파리는 메뉴 '파일 → Dock에 추가'")}
+      ${step(3, "<b>'설치'</b>를 누르면 끝", "바탕화면 · Dock · 시작 메뉴에서 앱처럼 열려요")}</ol>`
+  };
+  const body = `<div class="page-h"><span class="kicker">설치 안내</span><h1>홈 화면에 앱으로 담기</h1>
+      <div class="meta">앱스토어 없이 1분이면 끝 · 용량 부담 없이 늘 새 버전으로 열려요</div></div>
+    ${E.app ? `<div class="ok-box"><b>이미 앱으로 열려 있어요</b> 이 기기에는 설치가 끝났어요.</div>` : ""}
+    ${E.inApp ? `<div class="ok-box warn"><b>지금은 ${esc(E.browser)}예요</b> 이 안에서는 설치가 안 돼요. ${E.ios ? "오른쪽 아래 ··· → '다른 브라우저로 열기'(사파리)" : "오른쪽 위 ⋮ → '다른 브라우저로 열기'(크롬)"}로 연 다음 따라 해 주세요.</div>` : ""}
+    <div class="inst-url"><span>${esc(url)}</span><button class="btn ghost small" type="button" data-act="copyurl">주소 복사</button></div>
+    <button class="btn inst-btn" type="button" data-act="install" ${BIP ? "" : "hidden"}>${icon("next")} 이 기기에 앱 설치</button>
+    <div class="adm-tabs inst-tabs" role="tablist">${[["ios", "아이폰 · 아이패드"], ["android", "안드로이드"], ["pc", "컴퓨터"]].map(([k, l]) =>
+      `<button class="adm-tab" type="button" role="tab" data-act="insttab" data-v="${k}" aria-selected="${tab === k}">${l}${(k === "ios" && E.ios) || (k === "android" && E.android) || (k === "pc" && !E.ios && !E.android) ? " <small>· 이 기기</small>" : ""}</button>`).join("")}</div>
+    ${panes[tab]}
+    <div class="faq"><b>설치하면 무엇이 좋아요?</b><p>주소를 칠 필요 없이 아이콘으로 바로 열리고, 화면이 앱처럼 꽉 차고, 아침 알림을 받을 수 있어요. 외운 기록은 계정에 남아서 지웠다가 다시 설치해도 그대로예요.</p>
+      <b>아이콘이 예전 모양이에요</b><p>홈 화면의 앱을 길게 눌러 지운 다음 위 순서대로 다시 추가하면 새 아이콘으로 바뀌어요.</p></div>`;
+  const back = S.user ? "#/settings" : "#/";
+  $app.innerHTML = deskPage(topBar("<b>설치 안내</b>", back), tome(body));
+}
+
+// ───────── 화면: 승인 대기 — 열람 요청 보내기
+async function viewPending() {
+  const rid = rendering;
+  if (S.myReq === undefined) S.myReq = await B.getMyRequest(S.user.email);
+  if (rid !== rendering) return;
+  const R = S.myReq, editing = S.reqEdit || !R;
   $app.innerHTML = `<main class="gate">${tome(`
-    <span class="kicker">승인 대기</span>
-    <h1>아직 열람 허용이<br>되지 않았어요</h1>
-    <p>아래 메일 주소를 관리자에게 알려 주세요. 등록되면 바로 볼 수 있어요.</p>
-    <div class="mail">${esc(S.user.email)}</div>
-    <div class="actions">
-      <button class="btn" type="button" data-act="recheck">다시 확인</button>
-      <button class="btn ghost" type="button" data-act="signout">다른 계정으로 들어가기</button>
-    </div>`)}
+    <span class="kicker">${R && !editing ? "요청 보냄" : "열람 요청"}</span>
+    <h1>${R && !editing ? "열람 요청을<br>보냈어요" : "아직 열람 허용이<br>되지 않았어요"}</h1>
+    ${R && !editing ? `<p>관리자가 허용하면 바로 볼 수 있어요. 허용된 뒤 [다시 확인]을 눌러 주세요.</p>
+      <div class="mail"><b>${esc(R.name || "")}</b> · ${esc(S.user.email)}${R.note ? `<br><small>${esc(R.note)}</small>` : ""}<br><small>${ago(R.at)} 보냄</small></div>
+      <div class="actions"><button class="btn" type="button" data-act="recheck">다시 확인</button>
+        <button class="btn ghost" type="button" data-act="reqedit">요청 고치기</button>
+        <button class="btn ghost" type="button" data-act="signout">다른 계정으로 들어가기</button></div>`
+    : `<p>이름을 적어 열람 요청을 보내면, 관리자가 확인하고 허용해 드려요.</p>
+      <form class="req-form" id="reqForm">
+        <label>이름<input type="text" name="name" required maxlength="60" value="${esc((R && R.name) || S.user.name || "")}" placeholder="홍길동"></label>
+        <label>한 줄 소개 (선택)<input type="text" name="note" maxlength="200" value="${esc((R && R.note) || "")}" placeholder="예: 3학년 김하늘 엄마 · 찬양팀"></label>
+        <div class="mail">${esc(S.user.email)}</div>
+        <div class="actions"><button class="btn" type="submit">열람 요청 보내기</button>
+          ${R ? '<button class="btn ghost" type="button" data-act="reqcancel">그대로 두기</button>' : ""}
+          <button class="btn ghost" type="button" data-act="signout">다른 계정으로 들어가기</button></div>
+      </form>`}
+    <a class="gate-link" href="#/install">홈 화면에 앱으로 설치하는 법 ›</a>`)}
   </main>`;
+  const f = document.getElementById("reqForm");
+  if (f) f.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = f.name.value.trim(); if (!name) return;
+    try { await B.requestAccess(S.user, name, f.note.value); S.myReq = { name, note: f.note.value.trim(), at: Date.now() }; S.reqEdit = false; toast("열람 요청을 보냈어요"); render(); }
+    catch (err) { toast("보내지 못했어요. 잠시 뒤 다시 해 주세요"); }
+  });
+}
+
+// ───────── 아침 알림 받기 (이 기기)
+const tokKey = (t) => { let h = 2166136261; t = String(t || ""); for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619); } return "d" + (h >>> 0).toString(36) + t.length.toString(36); };
+const pushOnHere = () => { try { return pref("pushOn", "") === "1" && Notification.permission === "granted" && !!(S.myPush && S.myPush.devices && S.myPush.devices[pref("pushKey", "")]); } catch (e) { return false; } };
+async function pushLoad() {
+  if (S.pushCfg === undefined) S.pushCfg = await B.getConfig("push");
+  if (S.myPush === undefined) S.myPush = await B.getMyPush(S.user.uid);
+}
+const alarmTxt = (cfg) => ((cfg && cfg.alarms) || []).filter((a) => a.on !== false).map((a) => {
+  const d = a.days || [], days = d.length === 7 ? "매일" : d.join() === "1,2,3,4,5" ? "월~금" : d.map((k) => DAYS[k]).join("·");
+  return `${days} ${a.time}`; }).join(" · ");
+async function pushEnable() {
+  const E = envInfo(), cfg = S.pushCfg;
+  if (E.inApp) return toast(`${E.browser}에서는 알림을 받을 수 없어요. 사파리나 크롬으로 열어 주세요`);
+  if (E.ios && !E.app) { toast("아이폰은 홈 화면에 추가한 앱에서 켤 수 있어요"); return go("#/install"); }
+  if (!E.pushable) return toast("이 브라우저는 알림을 받을 수 없어요");
+  if (!cfg || !cfg.vapidKey) return toast("관리자가 아직 알림을 준비하지 않았어요");
+  const btn = document.querySelector('[data-act="pushon"]'); if (btn) { btn.disabled = true; btn.textContent = "켜는 중…"; }
+  try {
+    const perm = await Notification.requestPermission();      // 누른 그때 바로 물어야 아이폰에서도 창이 떠요
+    if (perm !== "granted") { toast(perm === "denied" ? "알림이 막혀 있어요. 기기 설정에서 이 앱의 알림을 허용해 주세요" : "알림 허용을 눌러 주세요"); return viewSettings(); }
+    const reg = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const token = await B.pushGetToken(cfg.vapidKey, reg);
+    if (!token) throw new Error("no-token");
+    const key = tokKey(token);
+    await B.savePushDevice(S.user, key, { t: token, label: E.label, kind: E.kind });
+    setPref("pushOn", "1"); setPref("pushKey", key);
+    S.myPush = S.myPush || { devices: {} }; S.myPush.devices = { ...(S.myPush.devices || {}), [key]: { t: token, label: E.label, kind: E.kind, at: Date.now() } };
+    toast("이 기기에서 아침 알림을 받아요");
+  } catch (e) {
+    console.error(e);
+    toast("알림을 켜지 못했어요" + (e && e.code ? " (" + e.code + ")" : ""));
+  }
+  viewSettings();
+}
+async function pushDisable(key) {
+  const mine = !key || key === pref("pushKey", "");
+  key = key || pref("pushKey", "");
+  try {
+    if (key) await B.removePushDevice(S.user, key);
+    if (mine) { await B.pushDeleteToken(); setPref("pushOn", ""); }
+    if (S.myPush && S.myPush.devices) delete S.myPush.devices[key];
+    toast(mine ? "이 기기 알림을 껐어요" : "그 기기를 뺐어요");
+  } catch (e) { toast("끄지 못했어요"); }
+  viewSettings();
+}
+
+// ───────── 접속 기록 (관리자 통계용) — 같은 기기에서 20분 안에 다시 열면 한 번으로
+function logVisitOnce() {
+  try {
+    const k = "lastLog." + S.user.uid, last = Number(pref(k, "0"));
+    if (Date.now() - last < 20 * 60000) return;
+    setPref(k, String(Date.now()));
+    const E = envInfo();
+    B.logVisit(S.user, { kind: E.kind, app: E.app, mem: Object.keys(S.userDoc.memorized || {}).length }).catch(() => {});
+  } catch (e) {}
+}
+const VIEWED = new Set();
+function logViewOnce(p) {
+  if (!p || VIEWED.has(p.id)) return;
+  VIEWED.add(p.id);
+  B.logView(S.user, String(p.ref || "").replace(/Ⓐ/g, ""), Object.keys(S.userDoc.memorized || {}).length).catch(() => {});
+}
+
+// 책장 위 작은 안내 띠: 설치 → (설치했으면) 알림 켜기 — 닫으면 다시 안 보임
+function shelfNudge() {
+  const E = envInfo();
+  if (!E.app && !E.inApp && pref("nudgeInstall", "") !== "x") return `<div class="nudge"><span><b>홈 화면에 설치</b>하면 앱처럼 바로 열리고 아침 알림도 받을 수 있어요</span><a class="btn small" href="#/install">설치 안내</a><button class="iconbtn" type="button" data-act="nudgex" data-v="nudgeInstall" aria-label="닫기">${icon("close")}</button></div>`;
+  if ((E.app || !E.ios) && E.pushable && S.pushCfg && S.pushCfg.vapidKey && alarmTxt(S.pushCfg) && !pushOnHere() && pref("nudgePush", "") !== "x")
+    return `<div class="nudge"><span><b>아침 알림</b> ${esc(alarmTxt(S.pushCfg))} — 이 기기로 받아 볼까요?</span><a class="btn small" href="#/settings">켜기</a><button class="iconbtn" type="button" data-act="nudgex" data-v="nudgePush" aria-label="닫기">${icon("close")}</button></div>`;
+  return "";
 }
 
 // 안내 한 장 (본문 없음 · 오류)
@@ -544,6 +694,7 @@ async function viewLibrary() {
   $app.innerHTML = `<div class="lib shelf">${top}
     <main class="shelf-main">
       <h1 class="shelf-h">어떤 말씀을 외울까요?</h1>
+      ${shelfNudge()}
       <div class="shelf-row n${vols.length}">${books}</div>
       <p class="shelf-hint">책을 누르면 단계와 진도가 펼쳐져요</p>
       ${cont}
@@ -912,6 +1063,7 @@ async function viewPassage(vol, num, no, q) {
     if (pref("swipeHint", "") !== "1" && mode !== "rec") { setPref("swipeHint", "1"); setTimeout(() => toast("옆으로 밀면 앞 · 뒤 본문으로 넘어가요"), 600); }
   }
   S.ctx = { vol, num, p, st, mode, nb, weak };
+  logViewOnce(p);
   fitAll();
   if (mode === "rec") wireRec();
 }
@@ -1089,6 +1241,7 @@ function viewBookSpread(c) {
   fl.innerHTML = `<button class="flip" type="button" data-act="bkprev" aria-label="앞 쪽으로" ${hasPrev ? "" : "disabled"}>${icon("back")}<span>${sp > 0 ? "앞 쪽" : hasPrev ? "앞 단계" : ""}</span></button><span class="pno">${sp * 2 + 1}</span>`;
   fr.innerHTML = `<span class="pno">${sp * 2 + 2} / ${BK.nSpreads * 2}</span><button class="flip" type="button" data-act="bknext" aria-label="다음 쪽으로" ${hasNext ? "" : "disabled"}><span>${sp < BK.nSpreads - 1 ? "다음 쪽" : hasNext ? "다음 단계" : ""}</span>${icon("next")}</button>`;
   S.ctx = { vol, num, p, st, mode, nb, b, weak: weakSet(S.marks[p.id]), book: true, visible, spread: sp, BK };
+  logViewOnce(p);
 }
 
 // 쪽 넘기기: 같은 단계 안에서는 두 쪽씩, 끝에서는 앞 · 다음 단계로
@@ -1283,8 +1436,22 @@ async function viewList(vol, num, k) {
 }
 
 // ───────── 설정
-function viewSettings() {
+async function viewSettings() {
+  const rid = rendering;
+  await pushLoad().catch(() => {});
+  if (rid !== rendering && location.hash.split("?")[0] !== "#/settings") return;
   const theme = pref("theme", "cream"), size = sizeNow(), mode = pref("mode", "read");
+  const E = envInfo(), P = S.pushCfg || {}, on = pushOnHere(), at = alarmTxt(P);
+  const devs = Object.entries((S.myPush && S.myPush.devices) || {});
+  const pushField = `<div class="field" id="pushField"><b>아침 알림 받기</b>
+      ${!P.vapidKey || !at ? `<p>관리자가 알림을 준비하면 여기서 켤 수 있어요.</p>`
+      : `<p>${esc(at)} · “${esc(((P.alarms || []).find((a) => a.on !== false) || {}).title || "말씀선포")}” 알림이 이 기기로 와요.</p>
+        ${E.inApp ? `<p class="warn-t">${esc(E.browser)}에서는 알림을 받을 수 없어요. 사파리 · 크롬으로 열어 주세요.</p>`
+        : E.ios && !E.app ? `<p class="warn-t">아이폰 · 아이패드는 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요.</p><div class="opts"><a class="btn small" href="#/install">홈 화면에 설치하는 법</a></div>`
+        : !E.pushable ? `<p class="warn-t">이 브라우저는 알림을 받을 수 없어요.</p>`
+        : `<div class="opts">${on ? `<span class="on-pill">${icon("check")} 이 기기에서 받는 중</span><button class="btn ghost small" type="button" data-act="pushoff">이 기기 끄기</button>`
+          : `<button class="btn small" type="button" data-act="pushon">이 기기에서 알림 받기</button>`}</div>`}
+        ${devs.length ? `<div class="devs">${devs.map(([k, d]) => `<span class="dev">${esc(d.label || "기기")}${k === pref("pushKey", "") ? " <small>· 이 기기</small>" : ""}<button class="iconbtn" type="button" data-act="pushrm" data-v="${esc(k)}" aria-label="이 기기는 그만 받기">${icon("close")}</button></span>`).join("")}</div>` : ""}`}</div>`;
   const opt = (name, val, cur, label) => `<button class="chip" type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${label}</button>`;
   $app.innerHTML = deskPage(topBar("<b>설정</b>", "#/"), tome(`
     <div class="page-h"><span class="kicker">설정</span><h1>나에게 맞게</h1></div>
@@ -1297,54 +1464,351 @@ function viewSettings() {
       <p>'책자 그대로'가 기본이고 가장 커요. 작게 할수록 한 쪽에 더 많은 줄이 들어가요. 기기마다 따로 기억해요.</p></div>
     <div class="field"><b>별빛 배경</b><div class="opts">${opt("stars", "on", pref("stars", "on"), "켜기")}${opt("stars", "off", pref("stars", "on"), "끄기")}</div>
       <p>책상 바탕에 별빛이 반짝이고 가끔 별똥별이 지나가요. 오래된 폰에서 느리면 꺼 주세요.</p></div>
+    ${pushField}
     <div class="field"><b>본문을 열 때 기본 방식</b><div class="opts">${MODES.map((m) => opt("mode", m.id, mode, m.label)).join("")}</div></div>
+    <div class="field"><b>홈 화면에 앱으로 설치</b><p>${E.app ? "이 기기는 앱으로 열려 있어요." : "아이콘으로 바로 열고 아침 알림도 받을 수 있어요."}</p><div class="opts"><a class="btn ghost small" href="#/install">설치 안내 보기</a></div></div>
     <div class="field"><b>계정</b><p>${esc(S.user.email)}</p><div class="opts"><button class="btn ghost small" type="button" data-act="signout">나가기</button></div></div>
     <p class="muted colo">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>`));
 }
 
-// ───────── 관리자
-async function viewAdmin() {
+// ───────── 관리자 (사람 관리 · 열람 요청 · 접속 통계 · 아침 알림 · 본문 올리기)
+const GROUPS0 = ["교사", "학부모", "학생", "성도", "기타"];
+const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
+const ALARM0 = () => ({ id: "a" + Date.now().toString(36), on: true, time: "07:00", days: [0, 1, 2, 3, 4, 5, 6], title: "말씀선포", body: "{이름}님, 오늘 말씀 선포 하셨나요?" });
+const ADM = { tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null };
+const tsMs = (t) => !t ? 0 : typeof t === "number" ? t : t.toMillis ? t.toMillis() : t.seconds ? t.seconds * 1000 : t instanceof Date ? t.getTime() : 0;
+function ago(t) {
+  const ms = tsMs(t); if (!ms) return "";
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 2) return "방금"; if (m < 60) return m + "분 전";
+  const h = Math.floor(m / 60); if (h < 24) return h + "시간 전";
+  const d = Math.floor(h / 24); if (d === 1) return "어제"; if (d < 31) return d + "일 전";
+  const x = new Date(ms); return `${x.getFullYear()}.${x.getMonth() + 1}.${x.getDate()}`;
+}
+const ymd = (t) => { const ms = tsMs(t); if (!ms) return ""; const x = new Date(ms + 9 * 3600e3); return x.toISOString().slice(0, 10); };
+const volTxt = (vols) => (vols || []).slice().sort().join("·") + ((vols || []).length ? "권" : "책 없음");
+
+async function admLoad(force) {
+  if (ADM.data && !force && Date.now() - ADM.loadedAt < 60000) return ADM.data;
+  const safe = (p, d) => p.catch(() => d);
+  const [rows, reqs, stats, days, cfgA, cfgP, log, subs] = await Promise.all([
+    safe(B.listAllow(), []), safe(B.listRequests(), []), safe(B.listStatsUsers(), []), safe(B.listStatsDays(30), []),
+    safe(B.getConfig("admin"), null), safe(B.getConfig("push"), null), safe(B.getConfig("pushLog"), null), safe(B.listPush(), [])]);
+  const statBy = {}; stats.forEach((x) => { if (x.email) statBy[x.email] = x; });
+  ADM.data = { rows, reqs, stats, statBy, days, groups: (cfgA && cfgA.groups && cfgA.groups.length) ? cfgA.groups : GROUPS0, push: cfgP || {}, log: log || {}, subs };
+  ADM.loadedAt = Date.now();
+  return ADM.data;
+}
+const admGroups = (D) => { const g = [...D.groups]; D.rows.forEach((r) => { if (r.group && !g.includes(r.group)) g.push(r.group); }); return g; };
+const grpList = (D) => `<datalist id="grpList">${admGroups(D).map((g) => `<option value="${esc(g)}">`).join("")}</datalist>`;
+const volChecks = (name, vols) => `<div class="checks">${VOLS.map((v) =>
+  `<label><input type="checkbox" name="${esc(name)}" value="${v}" ${(vols || []).includes(v) ? "checked" : ""}>${v}권</label>`).join("")}</div>`;
+const checkedVols = (box, name) => [...box.querySelectorAll(`input[name="${name}"]:checked`)].map((x) => x.value);
+
+async function viewAdmin(q = {}) {
   if (!S.admin) return go("#/");
   const rid = rendering;
-  let rows = [];
-  try { rows = await B.listAllow(); } catch (e) { toast("목록을 불러오지 못했어요"); }
-  if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
-  const volChecks = (prefix, vols) => `<div class="checks">${VOLS.map((v) =>
-    `<label><input type="checkbox" name="${prefix}" value="${v}" ${vols.includes(v) ? "checked" : ""}>${v}권</label>`).join("")}</div>`;
-  const list = rows.map((r) => `<div class="adm-row" data-email="${esc(r.email)}">
-      <div class="who"><b>${esc(r.email)}</b><span>${esc(r.name || "")}${r.role === "admin" ? " · 관리자" : ""}</span></div>
-      <div class="ctl">${volChecks("v_" + r.email, r.vols || [])}
-        <select aria-label="역할" data-role><option value="user" ${r.role !== "admin" ? "selected" : ""}>열람</option><option value="admin" ${r.role === "admin" ? "selected" : ""}>관리자</option></select>
-        <button class="btn small" type="button" data-act="allowsave">저장</button>
-        <button class="btn ghost small" type="button" data-act="allowdel">삭제</button></div></div>`).join("");
-  const counts = VOLS.map((v) => `${v}권 ${rows.filter((r) => (r.vols || []).includes(v)).length}명`).join(" · ");
-  $app.innerHTML = deskPage(topBar("<b>열람 허용 관리</b>", "#/"), tome(`
-    <div class="page-h"><span class="kicker">관리자</span><h1>열람 허용 메일</h1><div class="meta">${rows.length}명 · ${counts}</div></div>
-    <form class="adm-add" id="addForm">
-      <label>구글 메일 주소<input type="email" name="email" required placeholder="name@gmail.com" autocomplete="off"></label>
-      <label>이름 (선택)<input type="text" name="name" placeholder="홍길동 · 3학년 학부모"></label>
-      <div><span class="muted">볼 수 있는 책</span>${volChecks("v_new", ["1", "2", "3"])}</div>
-      <button class="btn" type="submit">허용 추가</button>
-    </form>
-    <div class="sec-h">등록된 메일</div>
-    ${list || '<p class="muted">아직 등록된 메일이 없어요.</p>'}
-    <div class="sec-h">본문 올리기</div>
-    <div class="upload">
-      <p class="muted" style="margin:0">제작 키트의 <b>amsong_content.json</b> 파일을 고르면 1·2·3권 본문이 올라가요. 책을 고쳐 다시 뽑았을 때도 같은 방법으로 덮어써요.</p>
-      <label class="btn ghost small" style="align-self:flex-start">파일 고르기<input type="file" accept="application/json,.json" id="contentFile" class="sr"></label>
-      <span class="muted" id="upMsg"></span>
-    </div>`));
-  document.getElementById("addForm").addEventListener("submit", async (e) => {
+  if (q.t) ADM.tab = q.t;
+  if (!ADM.data) $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/"), tome(`<p class="muted">불러오는 중…</p>`));
+  const D = await admLoad();
+  if (rid !== rendering) return;
+  const tabs = [["people", `사람 <small>${D.rows.length}</small>`], ["req", `열람 요청${D.reqs.length ? ` <em class="badge">${D.reqs.length}</em>` : ""}`],
+    ["stats", "접속 통계"], ["alarm", "아침 알림"], ["content", "본문 올리기"]];
+  const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "content" ? admContent() : admPeople(D);
+  $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/", `<button class="iconbtn" type="button" data-adm="reload" aria-label="새로 불러오기">${icon("refresh")}</button>`), tome(`
+    <nav class="adm-tabs adm-top" role="tablist" aria-label="관리 메뉴">${tabs.map(([id, lb]) =>
+      `<a class="adm-tab" role="tab" href="#/admin?t=${id}" data-nav aria-selected="${ADM.tab === id}">${lb}</a>`).join("")}</nav>
+    <div class="adm-body">${body}</div>${grpList(D)}`));
+  admWire(D);
+}
+
+// ── 사람
+function admFilter(D) {
+  const q = ADM.q.trim().toLowerCase();
+  let list = D.rows.filter((r) => ADM.grp === "*" || (ADM.grp === "" ? !r.group : r.group === ADM.grp));
+  if (q) list = list.filter((r) => [r.name, r.email, r.sub, r.memo, r.group].some((x) => String(x || "").toLowerCase().includes(q)));
+  const seen = (r) => tsMs((D.statBy[r.email] || {}).lastAt);
+  const by = {
+    name: (a, b) => (a.name || "힣").localeCompare(b.name || "힣", "ko") || a.email.localeCompare(b.email),
+    seen: (a, b) => seen(b) - seen(a),
+    new: (a, b) => tsMs(b.createdAt || b.updatedAt) - tsMs(a.createdAt || a.updatedAt),
+    group: (a, b) => (a.group || "힣").localeCompare(b.group || "힣", "ko") || (a.name || "").localeCompare(b.name || "", "ko")
+  }[ADM.sort] || ((a, b) => 0);
+  return list.sort(by);
+}
+function admPeopleList(D) {
+  const list = admFilter(D);
+  if (!list.length) return `<p class="muted adm-empty">${D.rows.length ? "찾는 사람이 없어요." : "아직 등록된 사람이 없어요. 위에서 추가하거나, 들어온 사람이 남긴 열람 요청을 허용해 주세요."}</p>`;
+  return list.map((r) => {
+    const st = D.statBy[r.email] || {}, open = ADM.open === r.email;
+    return `<div class="pp${open ? " open" : ""}" data-email="${esc(r.email)}">
+      <label class="pp-ck"><input type="checkbox" data-sel="${esc(r.email)}" ${ADM.sel.has(r.email) ? "checked" : ""} aria-label="${esc(r.name || r.email)} 고르기"></label>
+      <button class="pp-main" type="button" data-adm="ppopen" aria-expanded="${open}">
+        <span class="pp-n"><b>${esc(r.name || "이름 없음")}</b>${r.group ? `<i class="gb">${esc(r.group)}</i>` : ""}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}${r.role === "admin" ? '<i class="gb ad">관리자</i>' : ""}</span>
+        <span class="pp-e">${esc(r.email)} · ${volTxt(r.vols)}</span>
+      </button>
+      <span class="pp-seen">${st.lastAt ? `${ago(st.lastAt)}<small>${st.days || 1}일 들어옴</small>` : '<small class="never">아직 안 들어옴</small>'}</span>
+    </div>${open ? admEdit(D, r) : ""}`;
+  }).join("");
+}
+function admEdit(D, r) {
+  const st = D.statBy[r.email] || {};
+  return `<form class="pp-edit" data-email="${esc(r.email)}" id="ppEdit">
+    <div class="g2"><label>이름<input type="text" name="name" value="${esc(r.name || "")}" maxlength="60" placeholder="홍길동"></label>
+      <label>분류<input type="text" name="group" list="grpList" value="${esc(r.group || "")}" maxlength="40" placeholder="고르거나 적기"></label></div>
+    <div class="g2"><label>세부 (선택)<input type="text" name="sub" value="${esc(r.sub || "")}" maxlength="60" placeholder="3학년 · 1반 · 찬양팀"></label>
+      <label>역할<select name="role"><option value="user" ${r.role !== "admin" ? "selected" : ""}>열람</option><option value="admin" ${r.role === "admin" ? "selected" : ""}>관리자</option></select></label></div>
+    <label>메모 (선택)<input type="text" name="memo" value="${esc(r.memo || "")}" maxlength="300" placeholder="관리자만 봐요"></label>
+    <div><span class="muted">볼 수 있는 책</span>${volChecks("ev", r.vols)}</div>
+    <p class="muted pp-info">등록 ${ymd(r.createdAt) || "예전"}${r.addedBy ? " · " + esc(r.addedBy) : ""}${st.lastAt ? ` · 마지막 접속 ${ago(st.lastAt)} · ${st.days || 1}일 들어옴 · 외운 본문 ${st.mem || 0}` : ""}</p>
+    <div class="row-btns"><button class="btn small" type="submit">저장</button><button class="btn ghost small" type="button" data-adm="ppclose">닫기</button>
+      <button class="btn ghost small danger" type="button" data-adm="ppdel">삭제</button></div></form>`;
+}
+function admPeople(D) {
+  const gs = admGroups(D), n = (g) => D.rows.filter((r) => g === "" ? !r.group : r.group === g).length;
+  const chips = [["*", "전체", D.rows.length], ...gs.map((g) => [g, g, n(g)]).filter((x) => x[2] || D.groups.includes(x[0])), ...(n("") ? [["", "분류 없음", n("")]] : [])];
+  const panel = ADM.panel === "add" ? `<form class="adm-add" id="addForm">
+      <div class="g2"><label>구글 메일 주소<input type="email" name="email" required placeholder="name@gmail.com" autocomplete="off"></label>
+        <label>이름<input type="text" name="name" maxlength="60" placeholder="홍길동"></label></div>
+      <div class="g2"><label>분류<input type="text" name="group" list="grpList" maxlength="40" placeholder="고르거나 적기"></label>
+        <label>세부 (선택)<input type="text" name="sub" maxlength="60" placeholder="3학년 · 1반"></label></div>
+      <div><span class="muted">볼 수 있는 책</span>${volChecks("v_new", VOLS)}</div>
+      <div class="row-btns"><button class="btn" type="submit">등록</button><button class="btn ghost" type="button" data-adm="panel" data-v="">닫기</button></div></form>`
+    : ADM.panel === "bulk" ? `<form class="adm-add" id="bulkForm">
+      <label>한 줄에 한 명씩 붙여 넣기 <small>이름, 메일, 분류, 세부 순서 (쉼표나 탭으로 나눔 · 엑셀에서 복사해도 돼요)</small>
+        <textarea name="lines" rows="7" placeholder="김하늘, sky@gmail.com, 학부모, 3학년&#10;이바다, sea@gmail.com, 교사&#10;park@gmail.com"></textarea></label>
+      <div class="g2"><label>분류가 비어 있는 줄은<input type="text" name="group" list="grpList" maxlength="40" placeholder="고르거나 적기"></label><span></span></div>
+      <div><span class="muted">볼 수 있는 책</span>${volChecks("v_bulk", VOLS)}</div>
+      <p class="muted" id="bulkMsg">붙여 넣으면 몇 명인지 바로 세어 드려요.</p>
+      <div class="row-btns"><button class="btn" type="submit">한꺼번에 등록</button><button class="btn ghost" type="button" data-adm="panel" data-v="">닫기</button></div></form>`
+    : ADM.panel === "groups" ? `<form class="adm-add" id="grpForm">
+      <label>분류 이름 <small>쉼표로 나눠 적어요. 이 순서대로 보여요.</small><input type="text" name="groups" value="${esc(D.groups.join(", "))}"></label>
+      <p class="muted">분류 이름을 바꿔도 이미 등록된 사람의 분류는 그대로예요. (사람을 골라 '분류 바꾸기'로 한꺼번에 바꿀 수 있어요)</p>
+      <div class="row-btns"><button class="btn" type="submit">저장</button><button class="btn ghost" type="button" data-adm="panel" data-v="">닫기</button></div></form>` : "";
+  const sel = ADM.sel.size ? `<div class="sel-bar" id="selBar"><b>${ADM.sel.size}명 골랐어요</b>
+      <span class="sb-g"><input type="text" id="selGroup" list="grpList" placeholder="분류" maxlength="40"><button class="btn small" type="button" data-adm="selgroup">분류 바꾸기</button></span>
+      <span class="sb-g">${volChecks("v_sel", VOLS)}<button class="btn small" type="button" data-adm="selvols">책 바꾸기</button></span>
+      <span class="sb-g"><button class="btn ghost small danger" type="button" data-adm="seldel">삭제</button><button class="btn ghost small" type="button" data-adm="selnone">고르기 풀기</button></span></div>` : "";
+  return `<div class="adm-acts">
+      <button class="btn small" type="button" data-adm="panel" data-v="add">+ 한 명 등록</button>
+      <button class="btn ghost small" type="button" data-adm="panel" data-v="bulk">여러 명 한꺼번에</button>
+      <button class="btn ghost small" type="button" data-adm="panel" data-v="groups">분류 이름 정하기</button>
+      <button class="btn ghost small" type="button" data-adm="csv">엑셀(CSV) 내려받기</button></div>
+    ${panel}
+    <div class="adm-tools"><input type="search" id="admQ" value="${esc(ADM.q)}" placeholder="이름 · 메일 · 세부 · 메모로 찾기" aria-label="사람 찾기">
+      <select id="admSort" aria-label="정렬">${[["name", "이름순"], ["group", "분류순"], ["seen", "최근 접속순"], ["new", "최근 등록순"]].map(([v, l]) => `<option value="${v}" ${ADM.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+    <div class="grp-chips" role="group" aria-label="분류로 보기">${chips.map(([v, l, c]) => `<button class="chip" type="button" data-adm="grp" data-v="${esc(v)}" aria-pressed="${ADM.grp === v}">${esc(l)} <small>${c}</small></button>`).join("")}
+      <label class="pp-all"><input type="checkbox" id="selAll"> 보이는 사람 모두 고르기</label></div>
+    ${sel}
+    <div class="pp-list" id="ppList">${admPeopleList(D)}</div>`;
+}
+function parseBulk(text, defGroup) {
+  const out = [], bad = [];
+  text.split(/\r?\n/).forEach((line) => {
+    const t = line.split(/[,\t;]/).map((x) => x.trim()).filter(Boolean);
+    if (!t.length) return;
+    const ei = t.findIndex((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+    if (ei < 0) { bad.push(line.trim()); return; }
+    const email = t[ei].toLowerCase(), rest = t.filter((x, i) => i !== ei);
+    out.push({ email, name: rest[0] || "", group: rest[1] || defGroup || "", sub: rest.slice(2).join(" · ") });
+  });
+  const seen = new Set(); return { list: out.filter((x) => !seen.has(x.email) && seen.add(x.email)), bad };
+}
+function csvDownload(D) {
+  const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const head = ["이름", "메일", "분류", "세부", "볼 수 있는 책", "역할", "메모", "등록일", "마지막 접속", "들어온 날 수", "들어온 횟수", "본 본문", "외운 본문"];
+  const lines = admFilter(D).map((r) => { const s = D.statBy[r.email] || {};
+    return [r.name, r.email, r.group, r.sub, (r.vols || []).sort().join(" "), r.role === "admin" ? "관리자" : "열람", r.memo, ymd(r.createdAt), ymd(s.lastAt), s.days || 0, s.visits || 0, s.views || 0, s.mem || 0].map(q).join(","); });
+  const blob = new Blob(["﻿" + [head.map(q).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `말씀선포_사람목록_${B.kstDay()}.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// ── 열람 요청
+function admReq(D) {
+  if (!D.reqs.length) return `<p class="muted adm-empty">새 열람 요청이 없어요.<br>처음 들어온 사람이 이름을 적어 '열람 요청'을 누르면 여기에 보여요.</p>
+    <div class="howto"><b>사람들에게 이렇게 알려 주세요</b><ol><li>앱 주소를 열고 구글 계정으로 들어가기</li><li>이름을 적고 [열람 요청 보내기]</li><li>관리자가 허용하면 바로 볼 수 있어요</li></ol></div>`;
+  const list = D.reqs.slice().sort((a, b) => tsMs(b.at) - tsMs(a.at));
+  return `<p class="muted">구글로 들어와 열람 요청을 남긴 사람이에요. 분류와 책을 확인하고 [허용]을 누르면 바로 볼 수 있어요.</p>
+    <div class="adm-acts"><button class="btn small" type="button" data-adm="reqall">보이는 요청 모두 허용 (${list.length}명)</button></div>
+    ${list.map((r) => `<form class="rq" data-email="${esc(r.email)}">
+      <div class="rq-h"><b>${esc(r.name || r.dname || "이름 없음")}</b><span>${esc(r.email)} · ${ago(r.at)}</span>${r.note ? `<p class="rq-note">“${esc(r.note)}”</p>` : ""}</div>
+      <div class="g3"><label>이름<input type="text" name="name" value="${esc(r.name || r.dname || "")}" maxlength="60"></label>
+        <label>분류<input type="text" name="group" list="grpList" maxlength="40" placeholder="고르거나 적기"></label>
+        <label>세부 (선택)<input type="text" name="sub" maxlength="60" value=""></label></div>
+      <div class="rq-f">${volChecks("rv", VOLS)}<span class="row-btns"><button class="btn small" type="button" data-adm="reqok">허용</button><button class="btn ghost small danger" type="button" data-adm="reqno">거절</button></span></div>
+    </form>`).join("")}`;
+}
+
+// ── 접속 통계
+function admStats(D) {
+  const now = Date.now(), within = (d) => (s) => now - tsMs(s.lastAt) < d * 86400e3;
+  const reg = new Set(D.rows.map((r) => r.email)), st = D.stats.filter((s) => reg.has(s.email));
+  const today = B.kstDay(), tSet = new Set(Object.keys((D.days.find((x) => x.day === today) || { u: {} }).u));
+  const w7 = st.filter(within(7)).length, w30 = st.filter(within(30)).length;
+  const devs = D.subs.reduce((a, s) => a + Object.keys(s.devices || {}).length, 0), subsN = D.subs.filter((s) => Object.keys(s.devices || {}).length).length;
+  // 날짜별 막대 (최근 30일)
+  const days = []; for (let i = 29; i >= 0; i--) { const day = B.kstDay(now - i * 86400e3), x = D.days.find((d) => d.day === day); const u = x ? x.u : {};
+    days.push({ day, n: Object.keys(u).length, opens: Object.values(u).reduce((a, b) => a + (Number(b) || 0), 0) }); }
+  const max = Math.max(4, ...days.map((d) => d.n)), W = 600, H = 150, bw = W / 30;
+  const nice = max <= 4 ? 4 : Math.ceil(max / 4) * 4;
+  const bars = days.map((d, i) => { const h = d.n ? Math.max(3, (d.n / nice) * (H - 20)) : 0, x = i * bw + 2, y = H - h;
+    const lab = `${Number(d.day.slice(5, 7))}/${Number(d.day.slice(8))} · ${d.n}명 · ${d.opens}번`;
+    return `<g class="bar" tabindex="0" aria-label="${lab}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${H}"/>${h ? `<path d="M${x},${H} V${y + 3} q0,-3 3,-3 h${(bw - 10).toFixed(1)} q3,0 3,3 V${H} Z"/>` : ""}<title>${lab}</title></g>`; }).join("");
+  const grid = [0, .5, 1].map((f) => `<line x1="0" x2="${W}" y1="${H - f * (H - 20)}" y2="${H - f * (H - 20)}"/><text x="${W + 6}" y="${H - f * (H - 20) + 4}">${Math.round(nice * f)}</text>`).join("");
+  const ticks = [0, 7, 14, 21, 29].map((i) => `<text x="${i * bw + bw / 2}" y="${H + 16}" text-anchor="middle">${Number(days[i].day.slice(5, 7))}/${Number(days[i].day.slice(8))}</text>`).join("");
+  // 분류별
+  const gs = admGroups(D), gRows = [...gs, ""].map((g) => { const ppl = D.rows.filter((r) => g === "" ? !r.group : r.group === g); if (!ppl.length) return "";
+    const ss = ppl.map((r) => D.statBy[r.email]).filter(Boolean), a7 = ss.filter(within(7)).length, mem = ss.reduce((a, s) => a + (s.mem || 0), 0);
+    return `<tr><th>${esc(g || "분류 없음")}</th><td>${ppl.length}</td><td>${a7}<small> (${Math.round(a7 / ppl.length * 100)}%)</small></td><td>${ss.length ? (mem / ppl.length).toFixed(1) : "0"}</td></tr>`; }).join("");
+  // 사람별
+  const ppl = D.rows.map((r) => ({ r, s: D.statBy[r.email] || null })).sort((a, b) => tsMs(b.s && b.s.lastAt) - tsMs(a.s && a.s.lastAt));
+  const never = ppl.filter((x) => !x.s), sleep = ppl.filter((x) => x.s && now - tsMs(x.s.lastAt) >= 30 * 86400e3);
+  const nm = (x) => `<span class="nm">${esc(x.r.name || x.r.email)}${x.r.group ? `<small>${esc(x.r.group)}</small>` : ""}</span>`;
+  return `<div class="tiles">
+      <div class="tile"><small>등록한 사람</small><b>${D.rows.length}</b><span>명</span></div>
+      <div class="tile"><small>오늘 들어온 사람</small><b>${tSet.size}</b><span>명</span></div>
+      <div class="tile"><small>최근 7일</small><b>${w7}</b><span>명 · ${D.rows.length ? Math.round(w7 / D.rows.length * 100) : 0}%</span></div>
+      <div class="tile"><small>최근 30일</small><b>${w30}</b><span>명</span></div>
+      <div class="tile"><small>알림 받는 사람</small><b>${subsN}</b><span>명 · 기기 ${devs}대</span></div>
+    </div>
+    <div class="sec-h">날짜별 들어온 사람 · 최근 30일</div>
+    <figure class="chart"><svg viewBox="0 0 ${W + 28} ${H + 22}" role="img" aria-label="최근 30일 날짜별 들어온 사람 수"><g class="grid">${grid}</g><g class="bars">${bars}</g><g class="ticks">${ticks}</g></svg>
+      <figcaption class="muted">막대에 손가락이나 마우스를 올리면 그날 들어온 사람 수와 들어온 횟수가 보여요. (같은 사람이 20분 안에 다시 열면 한 번으로 셈)</figcaption></figure>
+    <details class="daytable"><summary>날짜별 숫자로 보기</summary><table class="st-t"><thead><tr><th>날짜</th><th>사람</th><th>횟수</th></tr></thead><tbody>${days.slice().reverse().map((d) => `<tr><td>${d.day}</td><td>${d.n}</td><td>${d.opens}</td></tr>`).join("")}</tbody></table></details>
+    <div class="sec-h">분류별</div>
+    <table class="st-t"><thead><tr><th>분류</th><th>등록</th><th>7일 안에 들어옴</th><th>한 사람 평균 외운 본문</th></tr></thead><tbody>${gRows}</tbody></table>
+    <div class="sec-h">사람별 · 최근 접속순</div>
+    <div class="st-wrap"><table class="st-t st-p"><thead><tr><th>이름</th><th>마지막 접속</th><th>들어온 날</th><th>본 본문</th><th>외운 본문</th><th>마지막 본 본문</th></tr></thead><tbody>
+      ${ppl.map((x) => `<tr><td>${nm(x)}</td><td>${x.s ? ago(x.s.lastAt) : '<small class="never">아직</small>'}</td><td>${x.s ? (x.s.days || 1) + "일" : "-"}</td><td>${x.s ? x.s.views || 0 : "-"}</td><td>${x.s ? x.s.mem || 0 : "-"}</td><td class="ref">${x.s && x.s.lastRef ? esc(x.s.lastRef) : ""}</td></tr>`).join("")}</tbody></table></div>
+    <div class="sec-h">한 번도 안 들어온 사람 · ${never.length}명</div>
+    <div class="nm-list">${never.map(nm).join("") || '<span class="muted">없어요</span>'}</div>
+    <div class="sec-h">30일 넘게 안 들어온 사람 · ${sleep.length}명</div>
+    <div class="nm-list">${sleep.map(nm).join("") || '<span class="muted">없어요</span>'}</div>
+    <p class="muted st-note">통계는 2.0 버전부터 모여요. 그 전에 들어왔던 사람은 다음에 들어올 때부터 보여요.</p>`;
+}
+
+// ── 아침 알림
+function admAlarm(D) {
+  const P = D.push || {}, L = D.log || {};
+  if (!ADM.alarms) ADM.alarms = (P.alarms && P.alarms.length ? P.alarms : [ALARM0()]).map((a) => ({ ...a, days: [...(a.days || [])] }));
+  const run = tsMs(L.lastRunAt), fresh = run && Date.now() - run < 40 * 60000;
+  const status = !P.vapidKey ? `<div class="ok-box warn"><b>아직 준비 전이에요</b> 아래 '처음 한 번 설정'의 1번(웹 푸시 키)부터 해 주세요.</div>`
+    : !run ? `<div class="ok-box warn"><b>알림 보내는 곳이 아직 연결되지 않았어요</b> '처음 한 번 설정'의 2·3번(GitHub)을 마치면 10분 안에 '연결됨'으로 바뀌어요.</div>`
+    : fresh ? `<div class="ok-box"><b>연결됨</b> 알림 보내는 곳이 10분마다 확인하고 있어요 · 마지막 확인 ${ago(L.lastRunAt)}</div>`
+    : `<div class="ok-box warn"><b>한동안 확인이 없어요</b> 마지막 확인 ${ago(L.lastRunAt)} · GitHub의 Actions 화면에서 '말씀선포 아침 알림'이 켜져 있는지 봐 주세요.</div>`;
+  const devs = D.subs.reduce((a, s) => a + Object.keys(s.devices || {}).length, 0), subsN = D.subs.filter((s) => Object.keys(s.devices || {}).length).length;
+  const runs = (L.runs || []).slice(-6).reverse();
+  return `${status}
+    <p class="muted">알림 받는 사람 <b>${subsN}명</b> · 기기 ${devs}대 · 각자 앱의 설정 → '아침 알림 받기'를 켠 사람에게만 가요.</p>
+    <div class="sec-h">보낼 알림 (최대 3개)</div>
+    <div id="alarmList">${ADM.alarms.map((a, i) => `<div class="al" data-i="${i}">
+      <div class="al-h"><label class="sw"><input type="checkbox" data-al="on" ${a.on !== false ? "checked" : ""}><span>${a.on !== false ? "켜짐" : "꺼짐"}</span></label>
+        <input type="time" data-al="time" value="${esc(a.time || "07:00")}" aria-label="보낼 시각">
+        <button class="btn ghost small danger" type="button" data-adm="aldel" ${ADM.alarms.length < 2 ? "disabled" : ""}>빼기</button></div>
+      <div class="al-days" role="group" aria-label="요일">${DAYS.map((d, k) => `<button class="chip" type="button" data-adm="alday" data-k="${k}" aria-pressed="${(a.days || []).includes(k)}">${d}</button>`).join("")}
+        <button class="chip" type="button" data-adm="alevery">매일</button><button class="chip" type="button" data-adm="alweek">월~금</button></div>
+      <label>제목<input type="text" data-al="title" value="${esc(a.title || "")}" maxlength="40" placeholder="말씀선포"></label>
+      <label>문구 <small>{이름} 을 넣으면 받는 사람 이름으로 바뀌어요</small><textarea data-al="body" rows="2" maxlength="160">${esc(a.body || "")}</textarea></label>
+      <div class="al-prev"><img src="icons/icon-192.png" alt=""><span><b>${esc((a.title || "말씀선포"))}</b>${esc((a.body || "").replace(/\{이름\}/g, S.user.name || "홍길동"))}</span></div>
+    </div>`).join("")}</div>
+    <div class="row-btns"><button class="btn" type="button" data-adm="alsave">알림 저장</button>
+      ${ADM.alarms.length < 3 ? '<button class="btn ghost small" type="button" data-adm="aladd">+ 알림 하나 더</button>' : ""}</div>
+    <div class="sec-h">시험해 보기</div>
+    <div class="row-btns"><button class="btn ghost small" type="button" data-adm="alpreview">이 기기에 모양만 미리 보기</button>
+      <button class="btn ghost small" type="button" data-adm="altest" ${P.vapidKey ? "" : "disabled"}>나에게 진짜 알림 보내 보기</button></div>
+    <p class="muted">'진짜 알림'은 알림 보내는 곳이 다음 확인 때(10분 안) 내 계정의 알림 켠 기기로 보내요. 먼저 설정 → 아침 알림 받기를 켜 두세요.${P.testReq ? ` · 마지막 요청 ${ago(P.testReq.at)}${L.testDone && L.testDone >= P.testReq.at ? " → 보냈어요" : " → 기다리는 중"}` : ""}</p>
+    ${runs.length ? `<div class="sec-h">최근 보낸 기록</div><table class="st-t"><thead><tr><th>때</th><th>알림</th><th>보냄</th><th>실패</th></tr></thead><tbody>${runs.map((r) =>
+      `<tr><td>${ago(r.at)}</td><td>${esc(r.label || r.id || "")}</td><td>${r.sent || 0}</td><td>${r.failed || 0}${r.removed ? `<small> (안 쓰는 기기 ${r.removed} 정리)</small>` : ""}</td></tr>`).join("")}</tbody></table>` : ""}
+    <div class="sec-h">처음 한 번 설정</div>
+    <details class="howto" ${P.vapidKey && run ? "" : "open"}><summary>순서 보기 (10분 정도 · 한 번만)</summary>
+      <ol>
+        <li><b>웹 푸시 키 만들기</b> — Firebase 콘솔에서 <b>amsong-99f03</b> 프로젝트 → 톱니(프로젝트 설정) → <b>클라우드 메시징</b> 탭 → 맨 아래 '웹 구성'의 <b>웹 푸시 인증서 → 키 쌍 생성</b> → 생긴 긴 키를 복사해 아래 칸에 붙여 넣고 저장</li>
+        <li><b>서비스 계정 키 받기</b> — 같은 프로젝트 설정 → <b>서비스 계정</b> 탭 → <b>새 비공개 키 생성</b> → 파일(.json)이 내려받아져요. 이 파일은 아무에게도 보내지 말고 GitHub에도 올리지 마세요.</li>
+        <li><b>GitHub에 넣기</b> — github.com/artist4rhythm-hub/amsong → Settings → Secrets and variables → Actions → <b>New repository secret</b> → 이름 <code>AMSONG_FIREBASE_SA</code>, 값에는 2번 파일을 텍스트 편집기로 열어 내용 전체를 붙여 넣기 → Add secret. 그다음 저장소 첫 화면 → Add file → Create new file → 이름 칸에 <code>.github/workflows/amsong-push.yml</code> → 압축 파일의 '4_알림실행파일' 안 내용을 그대로 붙여 넣고 Commit</li>
+      </ol>
+      <p class="muted">다 하면 이 화면 위쪽이 10분 안에 '연결됨'으로 바뀌어요. 자세한 그림 안내는 압축 파일의 읽어보세요 문서에 있어요.</p></details>
+    <form class="adm-add" id="vapidForm"><label>웹 푸시 키 (1번에서 복사한 키)<input type="text" name="vapid" value="${esc(P.vapidKey || "")}" placeholder="B로 시작하는 긴 키" autocomplete="off" spellcheck="false"></label>
+      <div class="row-btns"><button class="btn small" type="submit">키 저장</button></div></form>`;
+}
+
+// ── 본문 올리기
+const admContent = () => `<div class="upload">
+    <p class="muted" style="margin:0">제작 키트의 <b>amsong_content.json</b> 파일을 고르면 1·2·3권 본문이 올라가요. 책을 고쳐 다시 뽑았을 때도 같은 방법으로 덮어써요. (이 파일은 GitHub에 올리지 않아요)</p>
+    <label class="btn ghost small" style="align-self:flex-start">파일 고르기<input type="file" accept="application/json,.json" id="contentFile" class="sr"></label>
+    <span class="muted" id="upMsg"></span></div>`;
+
+// 관리 화면의 입력 칸 연결 (글자를 칠 때마다 화면 전체를 다시 그리지 않게)
+function admWire(D) {
+  const $ = (id) => document.getElementById(id);
+  const q = $("admQ");
+  if (q) q.addEventListener("input", () => { ADM.q = q.value; $("ppList").innerHTML = admPeopleList(D); });
+  const so = $("admSort");
+  if (so) so.addEventListener("change", () => { ADM.sort = so.value; $("ppList").innerHTML = admPeopleList(D); });
+  const all = $("selAll");
+  if (all) all.addEventListener("change", () => { admFilter(D).forEach((r) => all.checked ? ADM.sel.add(r.email) : ADM.sel.delete(r.email)); viewAdmin(); });
+  const pl = $("ppList");
+  if (pl) pl.addEventListener("change", (e) => { const c = e.target.closest("[data-sel]"); if (!c) return; c.checked ? ADM.sel.add(c.dataset.sel) : ADM.sel.delete(c.dataset.sel); viewAdmin(); });
+  const af = $("addForm");
+  if (af) af.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = e.target, email = f.email.value.trim().toLowerCase();
-    const vols = [...f.querySelectorAll('input[name="v_new"]:checked')].map((x) => x.value);
     if (!email) return;
-    try { await B.setAllow(email, { vols, name: f.name.value.trim(), role: "user" }); toast("추가했어요"); viewAdmin(); }
-    catch (err) { toast("추가하지 못했어요"); }
+    const ex = D.rows.find((r) => r.email === email);
+    try { await B.setAllow(email, { vols: checkedVols(f, "v_new"), name: f.name.value, group: f.group.value, sub: f.sub.value, ...(ex ? {} : { role: "user" }) }, !ex);
+      toast(ex ? "이미 있던 사람이라 정보를 고쳤어요" : "등록했어요"); ADM.panel = null; await admLoad(true); viewAdmin(); }
+    catch (err) { toast("등록하지 못했어요"); }
   });
-  document.getElementById("contentFile").addEventListener("change", async (e) => {
+  const bf = $("bulkForm");
+  if (bf) {
+    const msg = $("bulkMsg"), count = () => { const r = parseBulk(bf.lines.value, bf.group.value), ex = r.list.filter((x) => D.rows.some((y) => y.email === x.email)).length;
+      msg.textContent = r.list.length || r.bad.length ? `${r.list.length}명 알아봤어요${ex ? ` (이미 있는 ${ex}명은 이름 · 분류만 고침)` : ""}${r.bad.length ? ` · 메일 주소가 없는 줄 ${r.bad.length}개는 건너뜀` : ""}` : "붙여 넣으면 몇 명인지 바로 세어 드려요."; return r; };
+    bf.lines.addEventListener("input", count); bf.group.addEventListener("input", count);
+    bf.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const r = count(); if (!r.list.length) return toast("등록할 사람이 없어요");
+      const vols = checkedVols(bf, "v_bulk");
+      const list = r.list.map((x) => { const ex = D.rows.find((y) => y.email === x.email);
+        return ex ? { email: x.email, exists: true, ...(x.name ? { name: x.name } : {}), ...(x.group ? { group: x.group } : {}), ...(x.sub ? { sub: x.sub } : {}) }
+          : { email: x.email, name: x.name, group: x.group, sub: x.sub, vols, role: "user" }; });
+      try { msg.textContent = "등록하는 중…"; await B.setAllowMany(list, true); toast(`${list.length}명 등록했어요`); ADM.panel = null; await admLoad(true); viewAdmin(); }
+      catch (err) { msg.textContent = "등록하지 못했어요: " + (err.message || err); }
+    });
+  }
+  const gf = $("grpForm");
+  if (gf) gf.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const groups = [...new Set(gf.groups.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean))].slice(0, 30);
+    try { await B.setConfig("admin", { groups }); D.groups = groups.length ? groups : GROUPS0; ADM.panel = null; toast("분류 이름을 저장했어요"); viewAdmin(); }
+    catch (err) { toast("저장하지 못했어요"); }
+  });
+  const pe = $("ppEdit");
+  if (pe) pe.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = pe.dataset.email, d = { name: pe.name.value, group: pe.group.value, sub: pe.sub.value, memo: pe.memo.value, role: pe.role.value, vols: checkedVols(pe, "ev") };
+    if (email === S.user.email && d.role !== "admin" && S.allow && S.allow.role === "admin" && !confirm("내 계정을 '열람'으로 바꾸면 관리 화면을 못 쓸 수 있어요. 바꿀까요?")) return;
+    try { await B.setAllow(email, d); Object.assign(D.rows.find((r) => r.email === email), d); ADM.open = null; toast("저장했어요"); viewAdmin(); }
+    catch (err) { toast("저장하지 못했어요"); }
+  });
+  const al = $("alarmList");
+  if (al) al.addEventListener("input", (e) => {
+    const f = e.target.closest("[data-al]"); if (!f) return;
+    const a = ADM.alarms[Number(f.closest(".al").dataset.i)], k = f.dataset.al;
+    a[k] = k === "on" ? f.checked : f.value;
+    if (k === "on") f.nextElementSibling.textContent = f.checked ? "켜짐" : "꺼짐";
+    if (k === "title" || k === "body") { const pv = f.closest(".al").querySelector(".al-prev span"); pv.innerHTML = `<b>${esc(a.title || "말씀선포")}</b>${esc((a.body || "").replace(/\{이름\}/g, S.user.name || "홍길동"))}`; }
+  });
+  const vf = $("vapidForm");
+  if (vf) vf.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const k = vf.vapid.value.trim().replace(/\s+/g, "");
+    if (k && !/^[A-Za-z0-9_-]{60,120}$/.test(k)) return toast("키 모양이 달라요. 'B'로 시작하는 긴 글자를 그대로 붙여 넣어 주세요");
+    try { await B.setConfig("push", { vapidKey: k }); D.push.vapidKey = k; toast("웹 푸시 키를 저장했어요"); viewAdmin(); } catch (err) { toast("저장하지 못했어요"); }
+  });
+  const cf = $("contentFile");
+  if (cf) cf.addEventListener("change", async (e) => {
     const file = e.target.files[0]; if (!file) return;
-    const msg = document.getElementById("upMsg");
+    const msg = $("upMsg");
     try {
       const json = JSON.parse(await file.text());
       msg.textContent = "올리는 중…";
@@ -1355,12 +1819,89 @@ async function viewAdmin() {
   });
 }
 
+async function admClick(t) {
+  const D = ADM.data; if (!D) return;
+  const act = t.dataset.adm, row = t.closest("[data-email]"), email = row && row.dataset.email;
+  switch (act) {
+    case "reload": await admLoad(true); ADM.alarms = null; viewAdmin(); toast("새로 불러왔어요"); break;
+    case "panel": ADM.panel = t.dataset.v || null; viewAdmin(); break;
+    case "grp": ADM.grp = t.dataset.v; viewAdmin(); break;
+    case "ppopen": ADM.open = ADM.open === email ? null : email; viewAdmin(); break;
+    case "ppclose": ADM.open = null; viewAdmin(); break;
+    case "ppdel": {
+      if (email === S.user.email) return toast("내 계정은 지울 수 없어요");
+      if (!confirm(`${email} 을(를) 지울까요? 더 이상 책을 볼 수 없어요.`)) return;
+      try { await B.deleteAllow(email); D.rows = D.rows.filter((r) => r.email !== email); ADM.sel.delete(email); ADM.open = null; toast("지웠어요"); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      break;
+    }
+    case "csv": csvDownload(D); break;
+    case "selnone": ADM.sel.clear(); viewAdmin(); break;
+    case "selgroup": case "selvols": {
+      const emails = [...ADM.sel]; if (!emails.length) return;
+      const g = document.getElementById("selGroup").value.trim(), vols = checkedVols(document.getElementById("selBar"), "v_sel");
+      const d = act === "selgroup" ? { group: g } : { vols };
+      if (act === "selgroup" && !g && !confirm("분류를 비울까요?")) return;
+      try { await B.setAllowMany(emails.map((e) => ({ email: e, ...d }))); D.rows.forEach((r) => { if (ADM.sel.has(r.email)) Object.assign(r, d); });
+        toast(`${emails.length}명의 ${act === "selgroup" ? "분류" : "볼 수 있는 책"}를 바꿨어요`); viewAdmin(); } catch (e) { toast("바꾸지 못했어요"); }
+      break;
+    }
+    case "seldel": {
+      const emails = [...ADM.sel].filter((e) => e !== S.user.email); if (!emails.length) return toast("내 계정은 지울 수 없어요");
+      if (!confirm(`고른 ${emails.length}명을 지울까요? 더 이상 책을 볼 수 없어요.`)) return;
+      try { await B.deleteAllowMany(emails); D.rows = D.rows.filter((r) => !emails.includes(r.email)); ADM.sel.clear(); toast(`${emails.length}명을 지웠어요`); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      break;
+    }
+    case "reqok": case "reqall": {
+      const forms = act === "reqall" ? [...document.querySelectorAll("form.rq")] : [t.closest("form.rq")];
+      if (act === "reqall" && !confirm(`${forms.length}명의 요청을 모두 허용할까요? (각 줄에 적은 분류 · 책으로)`)) return;
+      const list = forms.map((f) => ({ email: f.dataset.email, name: f.name.value, group: f.group.value, sub: f.sub.value, vols: checkedVols(f, "rv"), role: "user" }));
+      try { await B.approveRequests(list); toast(`${list.length}명을 허용했어요`); await admLoad(true); viewAdmin(); } catch (e) { toast("허용하지 못했어요"); }
+      break;
+    }
+    case "reqno": {
+      if (!confirm(`${email} 의 요청을 거절(지우기)할까요?`)) return;
+      try { await B.deleteRequest(email); D.reqs = D.reqs.filter((r) => r.email !== email); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      break;
+    }
+    case "alday": case "alevery": case "alweek": {
+      const a = ADM.alarms[Number(t.closest(".al").dataset.i)], k = Number(t.dataset.k);
+      if (act === "alevery") a.days = [0, 1, 2, 3, 4, 5, 6]; else if (act === "alweek") a.days = [1, 2, 3, 4, 5];
+      else a.days = a.days.includes(k) ? a.days.filter((x) => x !== k) : [...a.days, k].sort();
+      viewAdmin(); break;
+    }
+    case "aladd": if (ADM.alarms.length < 3) { ADM.alarms.push({ ...ALARM0(), time: "21:00", body: "{이름}님, 오늘 외운 말씀을 한 번 더 선포해 볼까요?" }); viewAdmin(); } break;
+    case "aldel": ADM.alarms.splice(Number(t.closest(".al").dataset.i), 1); viewAdmin(); break;
+    case "alsave": {
+      const bad = ADM.alarms.find((a) => !/^\d{2}:\d{2}$/.test(a.time || "") || !(a.days || []).length || !(a.body || "").trim());
+      if (bad) return toast("시각 · 요일 · 문구를 모두 정해 주세요");
+      const alarms = ADM.alarms.map((a) => ({ id: a.id, on: a.on !== false, time: a.time, days: a.days, title: (a.title || "말씀선포").trim(), body: a.body.trim() }));
+      try { await B.setConfig("push", { alarms }); D.push.alarms = alarms; toast("알림을 저장했어요"); } catch (e) { toast("저장하지 못했어요"); }
+      break;
+    }
+    case "alpreview": {
+      const a = ADM.alarms[0] || ALARM0();
+      try {
+        if (!("Notification" in window)) return toast("이 브라우저는 알림을 띄울 수 없어요");
+        const p = await Notification.requestPermission(); if (p !== "granted") return toast("알림 허용을 눌러 주세요");
+        const reg = await navigator.serviceWorker.ready;
+        await reg.showNotification(a.title || "말씀선포", { body: (a.body || "").replace(/\{이름\}/g, S.user.name || ""), icon: "icons/icon-192.png", tag: "amsong-preview" });
+      } catch (e) { toast("미리 보기를 띄우지 못했어요"); }
+      break;
+    }
+    case "altest": {
+      try { const at = Date.now(); await B.setConfig("push", { testReq: { uid: S.user.uid, at } }); D.push.testReq = { uid: S.user.uid, at }; toast("10분 안에 내 기기로 시험 알림이 가요"); viewAdmin(); } catch (e) { toast("요청하지 못했어요"); }
+      break;
+    }
+  }
+}
+
 // ───────── 클릭 처리
 document.addEventListener("click", async (e) => {
   const nav = e.target.closest("a[data-nav]");
   if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
-  const t = e.target.closest("[data-act],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
+  const t = e.target.closest("[data-act],[data-adm],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
   if (!t) return;
+  if (t.dataset.adm) return admClick(t);
   if (t.dataset.tool) { PEN.tool = t.dataset.tool; setPref("penTool", PEN.tool); S.view.memoEdit = null; refreshPenBar(); refreshVerses(); return; }
   if (t.dataset.memo) { S.view.memoEdit = t.dataset.memo; refreshVerses(); return; }
   if (t.dataset.libvol) {
@@ -1439,6 +1980,7 @@ document.addEventListener("click", async (e) => {
       if (on) S.userDoc.memorized[id] = true; else delete S.userDoc.memorized[id];
       render();
       B.setMemorized(S.user.uid, id, on).catch(() => toast("저장하지 못했어요"));
+      B.logMem(S.user, Object.keys(S.userDoc.memorized).length).catch(() => {});
       if (on) toast("외운 본문으로 표시했어요");
       break;
     }
@@ -1448,20 +1990,15 @@ document.addEventListener("click", async (e) => {
       if (v.url) URL.revokeObjectURL(v.url);
       v.url = null; v.rec = "idle"; v.marks = {}; v.result = null; v.saved = false; render(); break;
     case "recsave": recSave(); break;
-    case "allowsave": {
-      const row = t.closest(".adm-row"), email = row.dataset.email;
-      const vols = [...row.querySelectorAll('input[type="checkbox"]:checked')].map((x) => x.value);
-      const role = row.querySelector("[data-role]").value;
-      try { await B.setAllow(email, { vols, role }); toast("저장했어요"); } catch (err) { toast("저장하지 못했어요"); }
-      break;
-    }
-    case "allowdel": {
-      const email = t.closest(".adm-row").dataset.email;
-      if (email === S.user.email) { toast("내 계정은 지울 수 없어요"); break; }
-      if (!confirm(email + " 의 열람 허용을 지울까요?")) break;
-      try { await B.deleteAllow(email); viewAdmin(); } catch (err) { toast("지우지 못했어요"); }
-      break;
-    }
+    case "install": if (BIP) { BIP.prompt(); const r = await BIP.userChoice.catch(() => null); if (r && r.outcome === "accepted") toast("설치했어요"); BIP = null; t.hidden = true; } break;
+    case "insttab": S.instTab = t.dataset.v; viewInstall(); break;
+    case "copyurl": const u = location.origin + location.pathname.replace(/index\.html$/, ""); try { await navigator.clipboard.writeText(u); toast("주소를 복사했어요"); } catch (err) { toast(u); } break;
+    case "reqedit": S.reqEdit = true; render(); break;
+    case "reqcancel": S.reqEdit = false; render(); break;
+    case "pushon": pushEnable(); break;
+    case "pushoff": pushDisable(); break;
+    case "pushrm": if (confirm("이 기기는 더 이상 알림을 받지 않게 뺄까요?")) pushDisable(t.dataset.v); break;
+    case "nudgex": setPref(t.dataset.v, "x"); t.closest(".nudge").remove(); break;
   }
 });
 document.addEventListener("keydown", (e) => {
@@ -1540,6 +2077,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { 
 let rendering = 0;
 async function render() {
   const my = ++rendering;
+  if (location.hash.split("?")[0] === "#/install") { document.documentElement.classList.remove("sky-quiet"); return viewInstall(); }
   if (!S.user) { document.documentElement.classList.remove("sky-quiet"); return viewLogin(); }
   if (!S.allow && !S.admin) return viewPending();
   const { parts, q } = parseHash();
@@ -1563,8 +2101,8 @@ async function render() {
     else if (r === "p") await viewPassage(a, Number(b2), Number(c), q);
     else if (r === "x") await viewExtra(a, b2);
     else if (r === "l") await viewList(a, Number(b2), Number(c));
-    else if (r === "settings") viewSettings();
-    else if (r === "admin") await viewAdmin();
+    else if (r === "settings") await viewSettings();
+    else if (r === "admin") await viewAdmin(q);
     else go("#/");
   } catch (err) {
     if (my !== rendering) return;
@@ -1585,6 +2123,7 @@ async function render() {
 async function boot(user) {
   Object.keys(NOTES).forEach((k) => delete NOTES[k]);
   S.user = user; S.allow = null; S.admin = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
+  S.myReq = undefined; S.reqEdit = false; S.pushCfg = undefined; S.myPush = undefined; ADM.data = null; ADM.alarms = null; ADM.sel.clear();
   if (!user) return render();
   // 열람 허용과 내 기록을 한꺼번에 받아 시작을 빠르게
   const udoc = B.getUserDoc(user.uid).catch(() => null);
@@ -1599,6 +2138,9 @@ async function boot(user) {
     let ud = await udoc;
     if (!ud) { try { ud = await B.getUserDoc(user.uid); } catch (e) {} } // 처음 허용된 직후 등
     S.userDoc = ud || {};
+    logVisitOnce();
+    B.getConfig("push").then((c) => { S.pushCfg = c; if (c && c.vapidKey && !location.hash.replace(/^#\/?/, "")) render(); }).catch(() => {});
+    B.getMyPush(user.uid).then((m) => { S.myPush = m; }).catch(() => {});
   }
   render();
 }

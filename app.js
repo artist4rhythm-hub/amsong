@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -105,6 +105,7 @@ const ICON = {
   note: '<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5"/><path d="M8.5 9h7M8.5 12.5h4"/>',
   trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  zoom: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>'
 };
 const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
@@ -162,7 +163,7 @@ function buildSky() {
 // 폰에서 본문을 읽는 중에는 종이가 화면을 거의 다 덮으므로 별을 멈춰 둠 (넘길 때 매끄럽게)
 function skyQuiet() {
   const r = location.hash.replace(/^#\/?/, "").split("/")[0];
-  const quiet = (r === "p" && !wide()) || (S.ctx && S.ctx.mode === "rec" && r === "p");
+  const quiet = (r === "p" && !wide()) || r === "t" || (S.ctx && S.ctx.mode === "rec" && r === "p");
   document.documentElement.classList.toggle("sky-quiet", !!quiet);
 }
 
@@ -572,7 +573,10 @@ function notePage(back, title, msg, action = "") {
 // ───────── 화면: 서재 — 펼친 책 (패드·컴퓨터: 두 쪽 펼침 / 폰: 한 쪽씩 넘기기)
 // 가로로 넓은 화면(패드 가로·컴퓨터·폰 가로)만 두 쪽 펼침, 세로 화면은 한 쪽씩
 const spreadMode = () => wide();
-const LIB = { vol: null, side: Number(pref("libSide", "0")) || 0 };
+const LIB = { vol: null, pg: Number(pref("libPg", "0")) || 0, wpic: 0 };
+// 폰에서 책 한 권의 쪽: 3권은 '성막 그림'이 맨 앞
+const libPages = (vol) => vol === "3" && canVol("3") ? ["tab", "stages", "cont"] : ["stages", "cont"];
+const LIB_PG_NAME = { tab: "성막 그림", stages: "단계 · 진도", cont: "지금 외우는 본문" };
 
 async function libData(vol) {
   const b = await book(vol);
@@ -711,8 +715,10 @@ async function viewBookPage(vol, fresh) {
   if (!vols.length) return viewNoBooks(top);
   if (!vols.includes(vol)) return go("#/");
   LIB.vol = vol; setPref("libVol", vol);
-  // 책장에서 새로 펼치면 단계 · 진도 쪽부터
-  if (fresh) { LIB.side = 1; setPref("libSide", "1"); }
+  // 책장에서 새로 펼치면 맨 앞 쪽부터 (3권은 성막 그림, 1·2권은 단계 · 진도)
+  const pages = libPages(vol);
+  if (fresh) { LIB.pg = 0; setPref("libPg", "0"); LIB.wpic = vol === "3" && pages[0] === "tab" ? 1 : 0; }
+  if (LIB.pg >= pages.length) LIB.pg = 0;
   const D = await libData(vol);
   if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
   const tabs = vols.map((v) => {
@@ -725,25 +731,248 @@ async function viewBookPage(vol, fresh) {
   if (spreadMode()) {
     // 본문 화면과 같은 펼친 책 — 책 고르기 색인은 왼쪽 쪽 위에
     const nav = `<nav class="tabs-top mode-tabs book-tabs" role="tablist" aria-label="책 고르기">${tabs}</nav>`;
-    const left = D ? `<div class="ob-back ob-runhead">${esc(VOL_NAME[vol])} · 단계와 진도</div>${libStagesPage(vol, D)}` : "";
+    if (vol === "3" && LIB.wpic && pages[0] === "tab") { $app.innerHTML = libTabSpread(top, nav, LIB.wpic); return; }
+    const left = D ? `<div class="ob-back ob-runhead">${esc(VOL_NAME[vol])} · 단계와 진도${pages[0] === "tab" ? ` · <button class="linkbtn" type="button" data-act="tabpic" data-v="1">성막 그림 보기</button>` : ""}</div>${libStagesPage(vol, D)}` : "";
     const right = D ? `<div class="page-in lib-cont">${libContPage(vol, D)}</div>` : "";
     $app.innerHTML = openBook(top, `<div class="page-in">${left}</div>`, right, nav, esc(VOL_NAME[vol]), "이어서 외우기", "lib-ob");
   } else {
-    const side = LIB.side;
+    const cur = pages[LIB.pg], nxt = pages[(LIB.pg + 1) % pages.length];
+    const body = !D ? "" : cur === "tab" ? libTabPage() : cur === "cont" ? libContPage(vol, D) : libStagesPage(vol, D);
     $app.innerHTML = `<div class="lib">${top}
       <div class="tabs-top" role="tablist" aria-label="책 고르기">${tabs}</div>
       <div class="book1"><div class="paper paperink" id="libPages">
-        <div class="page-in">
-          <div class="pg-body">${D ? (side === 0 ? libContPage(vol, D) : libStagesPage(vol, D)) : ""}</div>
+        <div class="page-in${cur === "tab" ? " pg-tab" : ""}">
+          <div class="pg-body">${body}</div>
           <div class="pg-actions">
-            <button class="pg-flip" type="button" data-act="libflip">${side === 0 ? "단계 · 진도 ↗" : "↖ 지금 외우는 본문"}</button>
+            <button class="pg-flip" type="button" data-act="libflip">${LIB.pg === pages.length - 1 ? "↖ " + LIB_PG_NAME[nxt] : LIB_PG_NAME[nxt] + " ↗"}</button>
             <a class="pg-go" href="${contHref}">이어서 외우기 ${icon("next")}</a>
           </div>
-          <div class="pg-dots" aria-hidden="true"><i class="${side === 0 ? "on" : ""}"></i><i class="${side === 1 ? "on" : ""}"></i></div>
+          <div class="pg-dots" aria-hidden="true">${pages.map((x, k) => `<i class="${k === LIB.pg ? "on" : ""}"></i>`).join("")}</div>
         </div>
       </div></div></div>`;
   }
   fitAll();
+}
+
+// ───────── 3권 성막 그림 (책자의 두 그림 · 번호로 보기 · 기구 하나씩 크게)
+// 그림 파일은 tab/ 폴더: 처음엔 작은 그림, 크게 볼 때만 큰 그림을 내려받음 (앱이 처음 켜질 때 느려지지 않게)
+const TAB_ITEMS = [
+  // n, 열쇠, 이름, 자리, 예수님 말씀, 성경, 본문 소제목, 전경 그림 위 점(%) · 바깥 번호표 자리(px, 390×250 기준), 책자 기구 그림 자리(mm), 책자 전경 번호표(mm)
+  { n: 1, key: "gate", name: "문", place: "뜰 · 동쪽", line: "예수님은 문이십니다", ref: "요 10:9 · 시 100", group: "문", sx: 84.64, sy: 74.21, lx: 360, ly: 196, r: [270, 99.84, 28, 24.32], b: [260.4, 132, 16] },
+  { n: 2, key: "altar", name: "번제단", place: "뜰", line: "예수님은 하나님의 어린양, 그 피를 믿는 믿음이 구원합니다", ref: "벧전 1:19 · 롬 3:25", group: "번제단", sx: 74.22, sy: 59.08, lx: 360, ly: 120, r: [225, 85.21, 42, 41.58], b: [260.4, 110, 20] },
+  { n: 3, key: "laver", name: "물두멍", place: "뜰", line: "예수님은 깨끗하게 하시는 생수이십니다", ref: "렘 2:13 · 요일 1:9", group: "물두멍", sx: 57.62, sy: 56.64, lx: 238, ly: 16, r: [181, 96.09, 34, 31.81], b: [166.53, 42, 20] },
+  { n: 4, key: "table", name: "떡상", place: "성소", line: "예수님은 생명의 떡이십니다", ref: "요 6:47-51", group: "떡상", sx: 40.39, sy: 37.89, lx: 180, ly: 16, r: [100.36, 73, 31.27, 26], b: [135.55, 42, 16] },
+  { n: 5, key: "lamp", name: "금촛대", place: "성소", line: "예수님은 세상의 빛이십니다", ref: "요 8:12", group: "금촛대", sx: 40.39, sy: 48.04, lx: 22, ly: 176, r: [102.88, 118.5, 26.24, 25], b: [42.65, 114, 20] },
+  { n: 6, key: "incense", name: "금향단", place: "성소", line: "예수님은 우리를 위해 간구하시는 대제사장이십니다", ref: "히 7:24-26", group: "금향단", sx: 32.88, sy: 39.55, lx: 22, ly: 132, r: [77.5, 97.89, 21, 24.22], b: [42.65, 98, 20] },
+  { n: 7, key: "veil", name: "휘장", place: "성소와 지성소 사이", line: "예수님의 몸이 휘장입니다", ref: "히 10:19-22", group: "", sx: 28.12, sy: 29.30, lx: 122, ly: 16, r: [52, 97.51, 20, 20.99], b: [105.55, 42, 16] },
+  { n: 8, key: "ark", name: "언약궤 · 속죄소", place: "지성소", line: "속죄소에 뿌려진 예수님의 피, 아버지 우편에 계신 예수님", ref: "히 9:11-12 · 엡 1:19-21 · 골 3:1-3", group: "", sx: 19.53, sy: 32.71, lx: 22, ly: 88, r: [15, 95.54, 38, 24.92], b: [33.3, 82, 30] }
+];
+const TAB_PIC = {
+  1: { name: "기구 그림", sub: "여덟 기구가 말하는 예수님", s: "tab/set1_s.jpg", m: "tab/set1_m.jpg", hr: "tab/set1.jpg", ar: 308 / 216 },
+  2: { name: "성막 전경", sub: "광야에 세워진 성막을 한눈에", s: "tab/set2_s.jpg", m: "tab/set2_m.jpg", hr: "tab/set2.jpg", ar: 308 / 216 },
+  3: { name: "전경 그림만", sub: "", s: "tab/scene_m.jpg", m: "tab/scene_m.jpg", hr: "tab/scene.jpg", ar: 1.5 }
+};
+const tabItem = (n) => TAB_ITEMS[Math.min(8, Math.max(1, Number(n) || 1)) - 1];
+const tabImg = (it, big) => `tab/${it.key}${big ? "" : "_s"}.webp`;
+// 본문 소제목(예: '성소 · 금촛대')으로 기구 찾기
+const tabOfPassage = (vol, p) => {
+  if (vol !== "3" || !p || !p.group) return null;
+  const g = String(p.group).split("·").pop().trim();
+  return TAB_ITEMS.find((it) => it.group && it.group === g) || null;
+};
+// 기구 → 그 기구 본문이 처음 나오는 곳 (3권 11~16단계)
+async function tabFirstPassage(it) {
+  if (!it.group || !canVol("3")) return null;
+  const b = await book("3").catch(() => null);
+  if (!b) return null;
+  for (const s of b.stages) {
+    const st = await stage("3", s.num).catch(() => null);
+    const p = st && st.passages.find((x) => x.group && String(x.group).split("·").pop().trim() === it.group);
+    if (p) return { num: st.num, no: p.no, label: st.label };
+  }
+  return null;
+}
+
+// 폰: 3권을 펼치면 먼저 보이는 '성막 그림' 쪽
+function libTabPage() {
+  const card = (k, link, btn, dark) => `<a class="tp-card" href="${link}">
+      <img src="${TAB_PIC[k].s}" alt="성막 ${TAB_PIC[k].name}" loading="lazy" width="800" height="561">
+      <span class="tp-cap"><span><b>${k} · ${TAB_PIC[k].name}</b><small>${TAB_PIC[k].sub}</small></span><span class="tp-btn${dark ? " dark" : ""}">${btn}</span></span></a>`;
+  return `<div class="pg-kick"><b>제3권 · 성벽기도</b> · 11~16단계</div>
+    <h2 class="tp-h">은혜의 성전 — 성막 그림</h2>
+    <p class="pg-muted tp-p">3권은 성막을 따라 외워요. 두 그림을 먼저 보고 시작해요. 그림을 누르면 크게 볼 수 있어요.</p>
+    ${card(1, "#/t/zoom/1", `크게 보기 ${icon("zoom")}`)}
+    ${card(2, "#/t/pins/1", `번호로 보기 ${icon("next")}`, true)}
+    <a class="tp-more" href="#/t/item/1">${icon("zoom")} 기구 하나씩 크게 보기</a>`;
+}
+
+// 패드 · 컴퓨터: 펼친 책 자리에 책자 그림 그대로 (책자의 번호표 · 기구를 누르면 그 기구로)
+function libTabSpread(top, nav, k) {
+  const P = TAB_PIC[k];
+  const hot = TAB_ITEMS.map((it) => {
+    if (k === 1) { const [x, y, w, h] = it.r; return `<a class="tp-hot box" href="#/t/item/${it.n}" style="left:${x / 3.08}%;top:${y / 2.16}%;width:${w / 3.08}%;height:${h / 2.16}%" aria-label="${esc(it.name)} 크게 보기"></a>`; }
+    const [x, y, w] = it.b; return `<a class="tp-hot pin" href="#/t/pins/${it.n}" style="left:${(x - 3) / 3.08}%;top:${(y - 3.2) / 2.16}%;width:${(w + 6) / 3.08}%;height:${6.4 / 2.16}%" aria-label="${it.n} ${esc(it.name)}"></a>`;
+  }).join("");
+  return `<div class="desk tpic-desk">${top}
+    <div class="tpic-wrap">
+      <div class="ob-tabs tpic-tabs">${nav}</div>
+      <div class="tpic"><div class="tpic-in" style="aspect-ratio:${P.ar}">
+        <img src="${P.m}" alt="성막 ${P.name}" width="2000" height="1403">
+        <span class="tpic-fold" aria-hidden="true"></span>${hot}
+        <a class="tpic-zoom" href="#/t/zoom/${k}">${icon("zoom")} 크게 보기</a>
+      </div></div>
+      <div class="tpic-bar">
+        <div class="tpic-seg" role="group" aria-label="그림 고르기">
+          <button class="chip" type="button" data-act="tabpic" data-v="1" aria-pressed="${k === 1}">1 · 기구 그림</button>
+          <button class="chip" type="button" data-act="tabpic" data-v="2" aria-pressed="${k === 2}">2 · 성막 전경</button>
+        </div>
+        <span class="muted">${k === 1 ? "기구를 누르면 하나씩 크게 보여요" : "책자의 번호표를 누르면 그 기구의 말씀과 외울 단계로 가요"}</span>
+        <button class="btn small" type="button" data-act="tabpic" data-v="0">단계 · 진도 ${icon("next")}</button>
+      </div>
+    </div></div>`;
+}
+
+// ── 크게 보기: 두 손가락으로 벌리기 · 두 번 톡 · 끌어서 옮기기 · 마우스 휠 · +/− 단추
+function zoomer(box, img, max, onScale) {
+  const Z = { s: 1, x: 0, y: 0, b: null };
+  const pts = new Map(); let g = null, tap = { t: 0, x: 0, y: 0 }, moved = 0;
+  const base = () => {
+    const bw = box.clientWidth, bh = box.clientHeight, ar = (img.naturalWidth && img.naturalHeight) ? img.naturalWidth / img.naturalHeight : Number(img.dataset.ar) || 1.4;
+    let w = bw, h = bw / ar; if (h > bh) { h = bh; w = bh * ar; }
+    return { bw, bh, w, h };
+  };
+  const clamp = () => {
+    const b = Z.b, W = b.w * Z.s, H = b.h * Z.s;
+    Z.x = W <= b.bw ? (b.bw - W) / 2 : Math.min(0, Math.max(b.bw - W, Z.x));
+    Z.y = H <= b.bh ? (b.bh - H) / 2 : Math.min(0, Math.max(b.bh - H, Z.y));
+  };
+  const apply = () => { img.style.transform = `translate3d(${Z.x}px,${Z.y}px,0) scale(${Z.s})`; onScale && onScale(Z.s); };
+  const at = (ns, cx, cy) => {
+    ns = Math.min(max, Math.max(1, ns));
+    Z.x = cx - (cx - Z.x) * (ns / Z.s); Z.y = cy - (cy - Z.y) * (ns / Z.s); Z.s = ns; clamp(); apply();
+  };
+  const layout = () => {
+    const old = Z.b; Z.b = base();
+    img.style.width = Z.b.w + "px"; img.style.height = Z.b.h + "px";
+    if (!old) { Z.x = (Z.b.bw - Z.b.w) / 2; Z.y = (Z.b.bh - Z.b.h) / 2; }
+    clamp(); apply();
+  };
+  const rel = (e) => { const r = box.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  box.addEventListener("pointerdown", (e) => {
+    box.setPointerCapture && box.setPointerCapture(e.pointerId);
+    pts.set(e.pointerId, rel(e)); moved = 0;
+    if (pts.size === 2) { const [a, c] = [...pts.values()]; g = { d: Math.hypot(a[0] - c[0], a[1] - c[1]) || 1, s: Z.s, m: [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2], x: Z.x, y: Z.y }; }
+    else if (pts.size === 1) { const p = rel(e); g = { p, x: Z.x, y: Z.y }; }
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, rel(e));
+    if (pts.size >= 2 && g && g.d) {
+      const [a, c] = [...pts.values()], d = Math.hypot(a[0] - c[0], a[1] - c[1]), m = [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2];
+      const ns = Math.min(max, Math.max(1, g.s * d / g.d));
+      Z.x = m[0] - (g.m[0] - g.x) * (ns / g.s); Z.y = m[1] - (g.m[1] - g.y) * (ns / g.s); Z.s = ns; clamp(); apply(); moved = 9;
+    } else if (g && g.p) {
+      const p = rel(e), dx = p[0] - g.p[0], dy = p[1] - g.p[1]; moved = Math.max(moved, Math.abs(dx) + Math.abs(dy));
+      if (Z.s > 1) { Z.x = g.x + dx; Z.y = g.y + dy; clamp(); apply(); }
+    }
+  });
+  const end = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    const p = pts.get(e.pointerId); pts.delete(e.pointerId);
+    if (pts.size === 1) { const q = [...pts.values()][0]; g = { p: q, x: Z.x, y: Z.y }; return; }
+    g = null;
+    if (moved < 8 && e.type === "pointerup") {
+      const now = Date.now();
+      if (now - tap.t < 320 && Math.abs(p[0] - tap.x) < 30 && Math.abs(p[1] - tap.y) < 30) { at(Z.s > 1.05 ? 1 : 2.5, p[0], p[1]); tap.t = 0; }
+      else tap = { t: now, x: p[0], y: p[1] };
+    }
+  };
+  box.addEventListener("pointerup", end); box.addEventListener("pointercancel", end);
+  box.addEventListener("wheel", (e) => { e.preventDefault(); const [cx, cy] = rel(e); at(Z.s * (e.deltaY < 0 ? 1.18 : 1 / 1.18), cx, cy); }, { passive: false });
+  if (img.complete) layout(); else img.addEventListener("load", layout, { once: true });
+  return {
+    layout, zoom: (f) => { const b = Z.b || base(); at(f === 0 ? 1 : Z.s * f, b.bw / 2, b.bh / 2); },
+    swap: (src) => { const hi = new Image(); hi.onload = () => { img.src = src; }; hi.src = src; }
+  };
+}
+window.addEventListener("resize", () => { if (S.zoom) setTimeout(() => S.zoom && S.zoom.layout(), 60); });
+
+// ── 화면: #/t/zoom/1|2|3 — 책자 그림 크게 보기
+// ── 화면: #/t/item/1~8 — 기구 하나씩 크게 보기
+// ── 화면: #/t/pins/1~8 — 성막 전경에서 번호로 보기
+const tabBack = () => S.tabFrom || "#/b/3";
+function viewTabZoom(k) {
+  const P = TAB_PIC[k] || TAB_PIC[1];
+  k = TAB_PIC[k] ? Number(k) : 1;
+  $app.innerHTML = `<div class="tv">
+    <header class="tv-top"><a class="tv-x" href="${tabBack()}" data-act="tabclose" aria-label="닫기">${icon("close")}</a>
+      <div class="tv-seg" role="group" aria-label="그림 고르기">${[1, 2, 3].map((n) => `<a href="#/t/zoom/${n}" data-nav aria-pressed="${n === k}">${n === 3 ? "그림만" : TAB_PIC[n].name}</a>`).join("")}</div>
+      <span class="tv-sp"></span></header>
+    <div class="tv-stage" id="tvStage"><img id="tvImg" src="${P.m}" data-ar="${P.ar}" alt="성막 ${P.name}" draggable="false"></div>
+    <div class="tv-ctl"><button type="button" data-act="tvz" data-v="0.66" aria-label="작게">−</button><button type="button" class="pct" data-act="tvz" data-v="0" id="tvPct">100%</button><button type="button" data-act="tvz" data-v="1.5" aria-label="크게">+</button></div>
+    <p class="tv-hint">두 손가락으로 벌리거나 두 번 톡 · 끌어서 옮기기${matchMedia("(hover: hover)").matches ? " · 마우스 휠" : ""}</p>
+  </div>`;
+  const img = document.getElementById("tvImg");
+  S.zoom = zoomer(document.getElementById("tvStage"), img, 5, (s) => { const e = document.getElementById("tvPct"); if (e) e.textContent = Math.round(s * 100) + "%"; });
+  S.zoom.swap(P.hr);
+}
+async function viewTabItem(n) {
+  const it = tabItem(n), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
+  $app.innerHTML = `<div class="tv tv-item">
+    <header class="tv-top"><a class="tv-x" href="${tabBack()}" data-act="tabclose" aria-label="닫기">${icon("close")}</a><span class="tv-pos">${it.n} / 8 · ${esc(it.place)}</span><span class="tv-sp"></span></header>
+    <div class="tv-stage" id="tvStage"><img id="tvImg" src="${tabImg(it)}" data-ar="1" alt="${esc(it.name)}" draggable="false">
+      <a class="tv-nav l" href="#/t/item/${prev.n}" data-nav aria-label="앞 기구 · ${esc(prev.name)}">${icon("back")}</a>
+      <a class="tv-nav r" href="#/t/item/${next.n}" data-nav aria-label="다음 기구 · ${esc(next.name)}">${icon("next")}</a></div>
+    <div class="tv-ctl"><button type="button" data-act="tvz" data-v="0.66" aria-label="작게">−</button><button type="button" class="pct" data-act="tvz" data-v="0" id="tvPct">100%</button><button type="button" data-act="tvz" data-v="1.5" aria-label="크게">+</button></div>
+    <section class="tv-cap"><b>${esc(it.name)}</b><p>${esc(it.line)}</p><span>${esc(it.ref)}</span><span id="tvGo"></span></section>
+    <nav class="tv-strip" aria-label="기구 고르기">${TAB_ITEMS.map((x) => `<a href="#/t/item/${x.n}" data-nav aria-current="${x.n === it.n}" aria-label="${x.n} ${esc(x.name)}"><img src="${tabImg(x)}" alt="" loading="lazy"></a>`).join("")}</nav>
+  </div>`;
+  const img = document.getElementById("tvImg");
+  S.zoom = zoomer(document.getElementById("tvStage"), img, 4, (s) => { const e = document.getElementById("tvPct"); if (e) e.textContent = Math.round(s * 100) + "%"; });
+  S.zoom.swap(tabImg(it, true));
+  const rid = rendering, fp = await tabFirstPassage(it);
+  if (rid === rendering && fp) { const g = document.getElementById("tvGo"); if (g) g.innerHTML = `<a class="tv-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)}</a>`; }
+}
+async function viewTabPins(n) {
+  const it = tabItem(n), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
+  const nums = pref("tabNums", "1") !== "0";
+  const fig = `<svg class="tp-fig" viewBox="0 0 390 250" role="group" aria-label="성막 전경 — 번호를 눌러 기구 보기">
+    <defs><clipPath id="tpClip"><rect x="45" y="36" width="300" height="200" rx="6"/></clipPath></defs>
+    <image href="tab/scene_m.jpg" x="45" y="36" width="300" height="200" preserveAspectRatio="xMidYMid slice" clip-path="url(#tpClip)"/>
+    ${nums ? TAB_ITEMS.map((x) => { const on = x.n === it.n, dx = 45 + x.sx * 3, dy = 36 + x.sy * 2, c = on ? "#C2410C" : "#1E3932";
+      return `<g class="tp-l${on ? " on" : ""}" aria-hidden="true"><line x1="${x.lx}" y1="${x.ly}" x2="${dx}" y2="${dy}" stroke="#FFFFFF" stroke-width="2.2" opacity=".8"/>
+        <line x1="${x.lx}" y1="${x.ly}" x2="${dx}" y2="${dy}" stroke="${c}" stroke-width="1" stroke-dasharray="3 2"/>
+        <circle cx="${dx}" cy="${dy}" r="${on ? 5 : 3.6}" fill="#FFFFFF"/><circle cx="${dx}" cy="${dy}" r="${on ? 3.2 : 2.1}" fill="${c}"/></g>`; }).join("")
+      + TAB_ITEMS.map((x) => { const on = x.n === it.n;
+      return `<g class="tp-pin" data-pin="${x.n}" role="button" tabindex="0" aria-label="${x.n} ${esc(x.name)}" aria-pressed="${on}"><circle cx="${x.lx}" cy="${x.ly}" r="16" fill="transparent"/>
+        <circle cx="${x.lx}" cy="${x.ly}" r="13" fill="${on ? "#C2410C" : "#1E3932"}" stroke="#FFFFFF" stroke-width="2"/><text x="${x.lx}" y="${x.ly + 4.3}" text-anchor="middle">${x.n}</text></g>`; }).join("") : ""}
+  </svg>`;
+  $app.innerHTML = deskPage(topBar(`<b>성막 전경</b> · 번호로 보기`, tabBack(), `<button class="chip small" type="button" data-act="tabnums">${nums ? "번호 끄기" : "번호 켜기"}</button>`), tome(`
+    <div class="tp-pins">
+      <div class="tp-figbox">${fig}<a class="tp-zoom" href="#/t/zoom/3" aria-label="그림 크게 보기">${icon("zoom")}</a></div>
+      <section class="tp-detail">
+        <div class="tp-dh"><a class="tp-thumb" href="#/t/item/${it.n}" aria-label="${esc(it.name)} 그림 크게 보기"><img src="${tabImg(it)}" alt=""><i>${icon("zoom")}</i></a>
+          <span><small>${it.n} · ${esc(it.place)}</small><b>${esc(it.name)}</b><em>그림을 누르면 크게 보여요</em></span></div>
+        <p class="tp-line">${esc(it.line)}</p><span class="tp-ref">${esc(it.ref)}</span>
+        <div id="tpGo">${it.group ? "" : `<p class="tp-none">그림에서 함께 보는 기구예요. 3권 단계에는 이 기구의 본문이 따로 없어요.</p>`}</div>
+        <div class="tp-pn"><a href="#/t/pins/${prev.n}" data-nav>‹ ${esc(prev.name)}</a><a href="#/t/pins/${next.n}" data-nav>${esc(next.name)} ›</a></div>
+      </section>
+    </div>
+    <p class="muted tp-note">책자 그림 그대로 보려면 <a href="#/t/zoom/2">성막 전경 크게 보기</a> · <a href="#/t/zoom/1">기구 그림 크게 보기</a></p>`));
+  const rid = rendering, fp = await tabFirstPassage(it);
+  if (rid === rendering && fp) { const g = document.getElementById("tpGo"); if (g) g.innerHTML = `<a class="btn tp-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)} ${icon("next")}</a>`; }
+}
+async function viewTab(kind, n) {
+  if (!canVol("3")) return go("#/");
+  if (kind === "zoom") return viewTabZoom(Number(n) || 1);
+  if (kind === "item") return viewTabItem(n);
+  return viewTabPins(n);
+}
+// 본문 위 작은 기구 그림 (3권 · 그 기구의 본문일 때)
+function tabStrip(vol, p) {
+  const it = tabOfPassage(vol, p);
+  if (!it) return "";
+  return `<a class="tp-strip" href="#/t/pins/${it.n}"><img src="${tabImg(it)}" alt="" loading="lazy"><span><small>${esc(it.place)} · ${it.n} ${esc(it.name)}</small><b>${esc(it.line)}</b><small>${esc(it.ref)}</small></span><em>그림에서 ${icon("next")}</em></a>`;
 }
 
 // 책 바꾸기 · 쪽 넘기기: 효과 없이 바로 바뀜 (폰에서 멈칫거리지 않게)
@@ -857,7 +1086,7 @@ const subLead = (p) => (p.sub ? `<div class="sub-band">[${esc(p.sub)}]</div>` : 
   + (p.lead || []).map((a) => `<div class="pnote-box ns lead">${a.lines.map(esc).join("<br>")}</div>`).join("");
 const glossHtml = (v) => (v.gloss || []).map((g) => `<span class="gloss ns">${esc(g)}</span>`).join("");
 function headHtml(st, p) {
-  return `<div class="crumb">${crumbOf(st, p)}</div>
+  return `${tabStrip(String(st.vol || (S.ctx && S.ctx.vol) || ""), p)}<div class="crumb">${crumbOf(st, p)}</div>
     ${p.topic ? `<span class="band">${esc(p.topic)}</span>` : ""}${subLead(p)}
     <h1 class="ptitle">${refHtml(p.ref)}${p.note ? `<span class="pnote">${esc(p.note)}</span>` : ""}</h1>`;
 }
@@ -1075,7 +1304,7 @@ async function viewPassage(vol, num, no, q) {
 const NOTE0 = { hl: {}, ul: {}, memo: {} };
 function bkHead(st, p) {
   const on = memorized(p.id);
-  return `<div class="bk-head"><div class="crumb">${crumbOf(st, p)}</div>
+  return `<div class="bk-head">${tabStrip(String(st.vol || ""), p)}<div class="crumb">${crumbOf(st, p)}</div>
     ${p.topic ? `<span class="band">${esc(p.topic)}</span>` : ""}${subLead(p)}
     <div class="bk-titlerow"><h2 class="ptitle">${refHtml(p.ref)}${p.note ? `<span class="pnote">${esc(p.note)}</span>` : ""}</h2>
     <button class="bk-memo" type="button" data-act="memo" data-pid="${p.id}" aria-pressed="${on}">${icon("check")}<span>${on ? "외웠어요" : "외웠어요 표시"}</span></button></div></div>`;
@@ -1899,8 +2128,10 @@ async function admClick(t) {
 document.addEventListener("click", async (e) => {
   const nav = e.target.closest("a[data-nav]");
   if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
-  const t = e.target.closest("[data-act],[data-adm],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
+  const t = e.target.closest("[data-act],[data-adm],[data-pin],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
   if (!t) return;
+  if (t.dataset.pin) { location.replace("#/t/pins/" + t.dataset.pin); return; }
+  if (t.dataset.act === "tabclose") { e.preventDefault(); if (S.tabFrom) history.back(); else location.replace(tabBack()); return; }
   if (t.dataset.adm) return admClick(t);
   if (t.dataset.tool) { PEN.tool = t.dataset.tool; setPref("penTool", PEN.tool); S.view.memoEdit = null; refreshPenBar(); refreshVerses(); return; }
   if (t.dataset.memo) { S.view.memoEdit = t.dataset.memo; refreshVerses(); return; }
@@ -1950,7 +2181,10 @@ document.addEventListener("click", async (e) => {
     case "recheck": await boot(S.user); break;
     case "theme": openThemePop(); break;
     case "themeclose": closeThemePop(); break;
-    case "libflip": libTurn(() => { LIB.side = LIB.side ? 0 : 1; setPref("libSide", String(LIB.side)); }); break;
+    case "libflip": libTurn(() => { LIB.pg = (LIB.pg + 1) % libPages(LIB.vol).length; setPref("libPg", String(LIB.pg)); }); break;
+    case "tabpic": LIB.wpic = Number(t.dataset.v) || 0; render(); break;
+    case "tabnums": setPref("tabNums", pref("tabNums", "1") === "0" ? "1" : "0"); render(); break;
+    case "tvz": if (S.zoom) S.zoom.zoom(Number(t.dataset.v)); break;
     case "openall": v.openAll = !v.openAll; v.open = new Set(); render(); break;
     case "drawer": S.drawer = !S.drawer; render(); break;
     case "bkprev": bkFlip(-1); break;
@@ -2004,6 +2238,7 @@ document.addEventListener("click", async (e) => {
 document.addEventListener("keydown", (e) => {
   const t = e.target;
   if ((e.key === "Enter" || e.key === " ") && t.dataset && t.dataset.line) { e.preventDefault(); t.click(); }
+  if ((e.key === "Enter" || e.key === " ") && t.closest && t.closest("[data-pin]")) { e.preventDefault(); location.replace("#/t/pins/" + t.closest("[data-pin]").dataset.pin); }
 });
 
 // 옆으로 밀어 넘기기 (폰 · 패드 모두)
@@ -2012,7 +2247,8 @@ const SW = { x: null, y: null, axis: null, dir: 0 };
 const swCue = () => document.getElementById("swipeCue") || (() => { const d = document.createElement("div"); d.id = "swipeCue"; d.setAttribute("aria-hidden", "true"); document.body.appendChild(d); return d; })();
 function swTarget(dir) {
   const h = location.hash.replace(/^#\/?/, "");
-  if (/^b\//.test(h) && !spreadMode()) return (dir > 0 && LIB.side === 0) || (dir < 0 && LIB.side === 1) ? (dir > 0 ? "단계 · 진도" : "이어서 외우기") : null;
+  if (/^b\//.test(h) && !spreadMode()) { const P = libPages(LIB.vol), k = LIB.pg + dir; return k >= 0 && k < P.length ? LIB_PG_NAME[P[k]] : null; }
+  if (/^t\//.test(h)) return null;
   if (!S.ctx || !location.hash.startsWith("#/p/") || S.ctx.mode === "rec") return null;
   if (PEN.on && S.ctx.mode === "read") return null;
   if (S.ctx.book) return dir > 0 ? "다음 쪽" : "앞 쪽";
@@ -2051,7 +2287,7 @@ document.addEventListener("touchend", (e) => {
   const dir = dx < 0 ? 1 : -1;
   if (!swTarget(dir)) return;
   const h = location.hash.replace(/^#\/?/, "");
-  if (/^b\//.test(h) && !spreadMode()) { libTurn(() => { LIB.side = LIB.side ? 0 : 1; setPref("libSide", String(LIB.side)); }); return; }
+  if (/^b\//.test(h) && !spreadMode()) { libTurn(() => { LIB.pg += dir; setPref("libPg", String(LIB.pg)); }); return; }
   if (S.ctx.book) { bkFlip(dir); return; }
   const n = dir > 0 ? S.ctx.nb.next : S.ctx.nb.prev;
   if (n) location.replace(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
@@ -2091,6 +2327,8 @@ async function render() {
   const oldL = document.querySelector('[data-keep="l"]'), oldR = document.querySelector('[data-keep="r"]');
   S._keepL = oldL && stageKey(route) && stageKey(route) === stageKey(S._route) ? oldL.scrollTop : null;
   const keepR = oldR && sameRoute ? oldR.scrollTop : null;
+  if (route.startsWith("#/t/") && !(S._route || "").startsWith("#/t/")) S.tabFrom = S._route || null;
+  if (!route.startsWith("#/t/")) S.zoom = null;
   S._route = route;
   try {
     const [r, a, b2, c] = parts;
@@ -2101,6 +2339,7 @@ async function render() {
     else if (r === "p") await viewPassage(a, Number(b2), Number(c), q);
     else if (r === "x") await viewExtra(a, b2);
     else if (r === "l") await viewList(a, Number(b2), Number(c));
+    else if (r === "t") await viewTab(a, b2);
     else if (r === "settings") await viewSettings();
     else if (r === "admin") await viewAdmin(q);
     else go("#/");

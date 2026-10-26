@@ -1,6 +1,6 @@
 // 앱 화면 파일만 기기에 보관 (본문은 로그인 후 Firestore에서 받아 기기에 보관)
 // 앱 파일을 고쳐 올릴 때마다 아래 이름의 숫자를 하나 올려 주세요.
-const CACHE = "amsong-shell-v13";
+const CACHE = "amsong-shell-v14";
 const SHELL = ["./", "index.html", "app.css", "app.js", "backend.js", "firebase-config.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-180.png",
   "icons/icon-maskable-192.png", "icons/icon-maskable-512.png", "icons/favicon-32.png", "icons/crest.png"];

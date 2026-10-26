@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.2.0";
+const VERSION = "2.2.1";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -826,9 +826,15 @@ const tabHead = (k, title, sub) => `<div class="tw-head"><span class="tw-kick">�
 // 1 · 기구 그림: 왼쪽 = 책자 그림(기구에 손을 올리면 그 기구가 떠오름), 오른쪽 = 여덟 기구 목록 (읽기 좋은 큰 글자)
 function tabSetPages() {
   const hot = TAB_ITEMS.map((it) => { const [x, y, w, h] = it.r;
-    return `<a class="tp-hot box" href="#/t/item/${it.n}" data-n="${it.n}" data-name="${esc(it.name)}" style="left:${x / 3.08}%;top:${y / 2.16}%;width:${w / 3.08}%;height:${h / 2.16}%" aria-label="${esc(it.name)} 크게 보기"><img class="tp-lift" src="${tabImg(it)}" alt=""></a>`; }).join("");
+    return `<a class="tp-hot box" href="#/t/item/${it.n}" data-n="${it.n}" style="left:${x / 3.08}%;top:${y / 2.16}%;width:${w / 3.08}%;height:${h / 2.16}%" aria-label="${esc(it.name)} 크게 보기"></a>`; }).join("");
+  // 손을 올리면 그 기구가 제자리에서 크게 커져 나옴 (그림 안에서 넘치지 않게 자리 맞춤, 단위 mm · 책자 308×216)
+  const pop = TAB_ITEMS.map((it) => { const [x, y, w, h] = it.r, cap = 34;
+    const sc = Math.min(4.2, 124 / h, 156 / w), bw = w * sc, bh = h * sc, cx = x + w / 2, cy = y + h / 2;
+    const L = Math.max(8, Math.min(308 - 8 - bw, cx - bw / 2)), T = Math.max(8, Math.min(216 - 8 - bh - cap, cy - bh / 2 - cap / 2));
+    return `<div class="tp-pop" data-n="${it.n}" aria-hidden="true" style="left:${(L / 3.08).toFixed(2)}%;top:${(T / 2.16).toFixed(2)}%;width:${(bw / 3.08).toFixed(2)}%;height:${(bh / 2.16).toFixed(2)}%;--s:${(1 / sc).toFixed(3)};transform-origin:${((cx - L) / bw * 100).toFixed(1)}% ${((cy - T) / bh * 100).toFixed(1)}%">
+      <img src="${tabImg(it)}" data-big="${tabImg(it, true)}" alt=""></div>`; }).join("");
   const left = `${tabHead(1, "예수 그리스도 안에 있는 은혜의 성전", "예수님의 몸이 성전입니다. (요 2:19-21)")}
-    <div class="tw-pic"><img src="${TAB_PIC[1].m}" alt="성막 기구 그림 — 책자 그대로" width="2000" height="1403">${hot}
+    <div class="tw-pic"><img src="${TAB_PIC[1].m}" alt="성막 기구 그림 — 책자 그대로" width="2000" height="1403"><i class="tp-scrim" aria-hidden="true"></i>${pop}<div class="tp-popcap" aria-hidden="true"><b></b><span></span></div>${hot}
       <a class="tpic-zoom" href="#/t/zoom/1">${icon("zoom")} 크게 보기</a></div>
     <p class="tw-tip">기구에 손가락(마우스)을 올리거나 누르면 그 기구를 크게 볼 수 있어요</p>
     <blockquote class="tw-quote">그러므로 우리는 긍휼하심을 받고 때를 따라 돕는 은혜를 얻기 위하여 은혜의 보좌 앞에 담대히 나아갈 것이니라<cite>히 4:16</cite></blockquote>`;
@@ -898,12 +904,21 @@ function tabSpreadView(mode, n) {
     : mode === "item" ? `<a class="linkbtn" href="#/t/item/${P.prev.n}" data-nav="replace">‹ ${esc(P.prev.name)}</a><span class="sep">·</span><a class="linkbtn" href="#/t/item/${P.next.n}" data-nav="replace">${esc(P.next.name)} ›</a>`
     : `<button class="linkbtn" type="button" data-act="tabpic" data-v="0">다음 쪽 · 단계 · 진도 ›</button>`;
   $app.innerHTML = openBook(top, `<div class="tw-page">${P.left}</div>`, `<div class="tw-page">${P.right}</div>`, tabBookTabs(cur), fl, fr, "tab-ob tw-" + mode);
-  // 오른쪽 목록에 손을 올리면 왼쪽 그림의 그 기구도 함께 떠오름
-  $app.querySelectorAll(".tw-row[data-n]").forEach((r) => {
-    const h = $app.querySelector(`.tp-hot[data-n="${r.dataset.n}"]`); if (!h) return;
-    r.addEventListener("pointerenter", () => h.classList.add("hl"));
-    r.addEventListener("pointerleave", () => h.classList.remove("hl"));
-  });
+  // 그림의 기구 · 오른쪽 목록에 손(마우스)을 올리면 왼쪽 그림에서 그 기구가 크게 커져 나옴
+  const pic = $app.querySelector(".tw-pic");
+  if (pic) {
+    const show = (n, on) => {
+      const p = pic.querySelector(`.tp-pop[data-n="${n}"]`); if (!p) return;
+      if (on) { const im = p.querySelector("img"); if (im.dataset.big) { const b = new Image(); b.onload = () => { im.src = b.src; }; b.src = im.dataset.big; im.dataset.big = ""; } }
+      p.classList.toggle("on", on); pic.classList.toggle("popping", !!pic.querySelector(".tp-pop.on"));
+      if (on) { const it = tabItem(n), c = pic.querySelector(".tp-popcap"); c.querySelector("b").textContent = `${it.n} · ${it.name}`; c.querySelector("span").textContent = it.line; }
+    };
+    const fine = matchMedia("(hover: hover)").matches;
+    $app.querySelectorAll(".tp-hot[data-n], .tw-row[data-n]").forEach((el) => {
+      if (fine) { el.addEventListener("pointerenter", () => show(el.dataset.n, true)); el.addEventListener("pointerleave", () => show(el.dataset.n, false)); }
+      el.addEventListener("focus", () => show(el.dataset.n, true)); el.addEventListener("blur", () => show(el.dataset.n, false));
+    });
+  }
   return P;
 }
 

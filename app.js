@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -372,7 +372,7 @@ const deskPage = (top, body) => `<div class="desk">${top}<main class="desk-main"
 const openBook = (top, left, right, tabs = "", folioL = "", folioR = "", cls = "") => `<div class="desk ob-desk${cls ? " " + cls : ""}">${top}
   <div class="ob-wrap"><div class="ob-tabs">${tabs}</div>
     <div class="ob"><div class="ob-stack" aria-hidden="true"></div><div class="ob-pages">
-      <aside class="ob-l paperink" aria-label="단계 구절표"><div class="ob-scroll" data-keep="l">${left}</div><div class="folio">${folioL}</div></aside>
+      <aside class="ob-l paperink" aria-label="왼쪽 쪽"><div class="ob-scroll" data-keep="l">${left}</div><div class="folio">${folioL}</div></aside>
       <div class="ob-gutter" aria-hidden="true"></div>
       <section class="ob-r paperink"><div class="ob-scroll" data-keep="r">${right}</div><div class="folio">${folioR}</div></section>
     </div></div>
@@ -717,7 +717,7 @@ async function viewBookPage(vol, fresh) {
   LIB.vol = vol; setPref("libVol", vol);
   // 책장에서 새로 펼치면 맨 앞 쪽부터 (3권은 성막 그림, 1·2권은 단계 · 진도)
   const pages = libPages(vol);
-  if (fresh) { LIB.pg = 0; setPref("libPg", "0"); LIB.wpic = vol === "3" && pages[0] === "tab" ? 1 : 0; }
+  if (fresh) { LIB.pg = 0; setPref("libPg", "0"); LIB.wpic = LIB.nextPic !== undefined ? LIB.nextPic : vol === "3" && pages[0] === "tab" ? 1 : 0; LIB.nextPic = undefined; }
   if (LIB.pg >= pages.length) LIB.pg = 0;
   const D = await libData(vol);
   if (rid !== rendering) return; // 그새 다른 화면으로 갔으면 그리지 않음
@@ -731,10 +731,15 @@ async function viewBookPage(vol, fresh) {
   if (spreadMode()) {
     // 본문 화면과 같은 펼친 책 — 책 고르기 색인은 왼쪽 쪽 위에
     const nav = `<nav class="tabs-top mode-tabs book-tabs" role="tablist" aria-label="책 고르기">${tabs}</nav>`;
-    if (vol === "3" && LIB.wpic && pages[0] === "tab") { $app.innerHTML = libTabSpread(top, nav, LIB.wpic); return; }
-    const left = D ? `<div class="ob-back ob-runhead">${esc(VOL_NAME[vol])} · 단계와 진도${pages[0] === "tab" ? ` · <button class="linkbtn" type="button" data-act="tabpic" data-v="1">성막 그림 보기</button>` : ""}</div>${libStagesPage(vol, D)}` : "";
+    if (vol === "3" && LIB.wpic && pages[0] === "tab") {
+      const P = tabSpreadView(LIB.wpic === 2 ? "pins0" : "set", LIB.pinSel || 1);
+      if (LIB.wpic === 2) tabFirstPassage(P.it).then((fp) => { const g = document.getElementById("tpGo"); if (g && fp) g.innerHTML = `<a class="btn tp-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)} ${icon("next")}</a>`; });
+      return;
+    }
+    const left = D ? `<div class="ob-back ob-runhead">${esc(VOL_NAME[vol])} · 단계와 진도</div>${libStagesPage(vol, D)}` : "";
     const right = D ? `<div class="page-in lib-cont">${libContPage(vol, D)}</div>` : "";
-    $app.innerHTML = openBook(top, `<div class="page-in">${left}</div>`, right, nav, esc(VOL_NAME[vol]), "이어서 외우기", "lib-ob");
+    const t3 = vol === "3" && pages[0] === "tab";
+    $app.innerHTML = openBook(top, `<div class="page-in">${left}</div>`, right, t3 ? tabBookTabs(0) : nav, esc(VOL_NAME[vol]), "이어서 외우기", t3 ? "lib-ob tab-ob" : "lib-ob");
   } else {
     const cur = pages[LIB.pg], nxt = pages[(LIB.pg + 1) % pages.length];
     const body = !D ? "" : cur === "tab" ? libTabPage() : cur === "cont" ? libContPage(vol, D) : libStagesPage(vol, D);
@@ -806,30 +811,100 @@ function libTabPage() {
     <a class="tp-more" href="#/t/item/1">${icon("zoom")} 기구 하나씩 크게 보기</a>`;
 }
 
-// 패드 · 컴퓨터: 펼친 책 자리에 책자 그림 그대로 (책자의 번호표 · 기구를 누르면 그 기구로)
-function libTabSpread(top, nav, k) {
-  const P = TAB_PIC[k];
-  const hot = TAB_ITEMS.map((it) => {
-    if (k === 1) { const [x, y, w, h] = it.r; return `<a class="tp-hot box" href="#/t/item/${it.n}" style="left:${x / 3.08}%;top:${y / 2.16}%;width:${w / 3.08}%;height:${h / 2.16}%" aria-label="${esc(it.name)} 크게 보기"></a>`; }
-    const [x, y, w] = it.b; return `<a class="tp-hot pin" href="#/t/pins/${it.n}" style="left:${(x - 3) / 3.08}%;top:${(y - 3.2) / 2.16}%;width:${(w + 6) / 3.08}%;height:${6.4 / 2.16}%" aria-label="${it.n} ${esc(it.name)}"></a>`;
+// ── 패드 · 컴퓨터: 3권 성막 그림도 다른 화면과 똑같은 펼친 책 두 쪽 (바깥 크기 같게, 안을 그림과 글로 채움)
+// 위쪽 색인: 왼쪽 쪽 위 = 책 고르기, 오른쪽 쪽 위 = 1 기구 그림 · 2 성막 전경 · 단계 · 진도
+function tabBookTabs(cur) {
+  const vols = VOLS.filter((v) => canVol(v) && S.books[v]).map((v) => {
+    const b = S.books[v], pct = b && b.total ? Math.round((memCount(v) / b.total) * 100) : 0;
+    return `<button class="btab" type="button" role="tab" data-libvol="${v}" aria-selected="${v === "3"}" aria-label="${esc(VOL_NAME[v])} · 외움 ${pct}%" style="--tabc:${VOL_TAB[v]}"><b>${VOL_SHORT[v]}</b><span>${pct}%</span></button>`;
   }).join("");
-  return `<div class="desk tpic-desk">${top}
-    <div class="tpic-wrap">
-      <div class="ob-tabs tpic-tabs">${nav}</div>
-      <div class="tpic"><div class="tpic-in" style="aspect-ratio:${P.ar}">
-        <img src="${P.m}" alt="성막 ${P.name}" width="2000" height="1403">
-        <span class="tpic-fold" aria-hidden="true"></span>${hot}
-        <a class="tpic-zoom" href="#/t/zoom/${k}">${icon("zoom")} 크게 보기</a>
-      </div></div>
-      <div class="tpic-bar">
-        <div class="tpic-seg" role="group" aria-label="그림 고르기">
-          <button class="chip" type="button" data-act="tabpic" data-v="1" aria-pressed="${k === 1}">1 · 기구 그림</button>
-          <button class="chip" type="button" data-act="tabpic" data-v="2" aria-pressed="${k === 2}">2 · 성막 전경</button>
-        </div>
-        <span class="muted">${k === 1 ? "기구를 누르면 하나씩 크게 보여요" : "책자의 번호표를 누르면 그 기구의 말씀과 외울 단계로 가요"}</span>
-        <button class="btn small" type="button" data-act="tabpic" data-v="0">단계 · 진도 ${icon("next")}</button>
-      </div>
-    </div></div>`;
+  const pic = [[1, "1 · 기구 그림"], [2, "2 · 성막 전경"], [0, "단계 · 진도"]].map(([k, l]) =>
+    `<button class="btab" type="button" role="tab" data-act="tabpic" data-v="${k}" aria-selected="${cur === k}" style="--tabc:${k === 0 ? "#16302A" : k === 1 ? "#2F5D4E" : "#1F4A44"}"><b>${l}</b></button>`).join("");
+  return `<div class="tab-tabs"><nav class="tabs-top mode-tabs book-tabs" role="tablist" aria-label="책 고르기">${vols}</nav><nav class="tabs-top mode-tabs pic-tabs" role="tablist" aria-label="3권 성막 그림">${pic}</nav></div>`;
+}
+const tabHead = (k, title, sub) => `<div class="tw-head"><span class="tw-kick">성막 · 예수 그리스도</span><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ""}</div>`;
+// 1 · 기구 그림: 왼쪽 = 책자 그림(기구에 손을 올리면 그 기구가 떠오름), 오른쪽 = 여덟 기구 목록 (읽기 좋은 큰 글자)
+function tabSetPages() {
+  const hot = TAB_ITEMS.map((it) => { const [x, y, w, h] = it.r;
+    return `<a class="tp-hot box" href="#/t/item/${it.n}" data-n="${it.n}" data-name="${esc(it.name)}" style="left:${x / 3.08}%;top:${y / 2.16}%;width:${w / 3.08}%;height:${h / 2.16}%" aria-label="${esc(it.name)} 크게 보기"><img class="tp-lift" src="${tabImg(it)}" alt=""></a>`; }).join("");
+  const left = `${tabHead(1, "예수 그리스도 안에 있는 은혜의 성전", "예수님의 몸이 성전입니다. (요 2:19-21)")}
+    <div class="tw-pic"><img src="${TAB_PIC[1].m}" alt="성막 기구 그림 — 책자 그대로" width="2000" height="1403">${hot}
+      <a class="tpic-zoom" href="#/t/zoom/1">${icon("zoom")} 크게 보기</a></div>
+    <p class="tw-tip">기구에 손가락(마우스)을 올리거나 누르면 그 기구를 크게 볼 수 있어요</p>
+    <blockquote class="tw-quote">그러므로 우리는 긍휼하심을 받고 때를 따라 돕는 은혜를 얻기 위하여 은혜의 보좌 앞에 담대히 나아갈 것이니라<cite>히 4:16</cite></blockquote>`;
+  const right = `<div class="tw-listh"><b>여덟 기구와 예수님</b><span>문에서 지성소까지 · 누르면 크게</span></div>
+    <div class="tw-list">${TAB_ITEMS.map((it) => `<a class="tw-row" href="#/t/item/${it.n}" data-n="${it.n}">
+      <span class="tw-th"><img src="${tabImg(it)}" alt="" loading="lazy"></span>
+      <span class="tw-tx"><small><i>${it.n}</i><strong>${esc(it.name)}</strong>${esc(it.place)}<em>${esc(it.ref)}</em></small><b>${esc(it.line)}</b></span></a>`).join("")}</div>`;
+  return { left, right };
+}
+// 2 · 성막 전경: 왼쪽 = 전경 그림(번호는 그림 바깥), 오른쪽 = 고른 기구의 말씀 · 외울 단계 · 여덟 기구 고르기
+function tabFig(sel, nums) {
+  return `<svg class="tp-fig" viewBox="0 0 390 250" role="group" aria-label="성막 전경 — 번호를 눌러 기구 보기">
+    <defs><clipPath id="tpClip"><rect x="45" y="36" width="300" height="200" rx="6"/></clipPath></defs>
+    <image href="tab/scene_m.jpg" x="45" y="36" width="300" height="200" preserveAspectRatio="xMidYMid slice" clip-path="url(#tpClip)"/>
+    ${nums ? TAB_ITEMS.map((x) => { const on = x.n === sel, dx = 45 + x.sx * 3, dy = 36 + x.sy * 2, c = on ? "#C2410C" : "#1E3932";
+      return `<g aria-hidden="true"><line x1="${x.lx}" y1="${x.ly}" x2="${dx}" y2="${dy}" stroke="#FFFFFF" stroke-width="2.2" opacity=".8"/>
+        <line x1="${x.lx}" y1="${x.ly}" x2="${dx}" y2="${dy}" stroke="${c}" stroke-width="1" stroke-dasharray="3 2"/>
+        <circle cx="${dx}" cy="${dy}" r="${on ? 5 : 3.6}" fill="#FFFFFF"/><circle cx="${dx}" cy="${dy}" r="${on ? 3.2 : 2.1}" fill="${c}"/></g>`; }).join("")
+      + TAB_ITEMS.map((x) => { const on = x.n === sel;
+      return `<g class="tp-pin" data-pin="${x.n}" role="button" tabindex="0" aria-label="${x.n} ${esc(x.name)}" aria-pressed="${on}"><circle cx="${x.lx}" cy="${x.ly}" r="16" fill="transparent"/>
+        <circle class="pc" cx="${x.lx}" cy="${x.ly}" r="13" fill="${on ? "#C2410C" : "#1E3932"}" stroke="#FFFFFF" stroke-width="2"/><text x="${x.lx}" y="${x.ly + 4.3}" text-anchor="middle">${x.n}</text></g>`; }).join("") : ""}
+  </svg>`;
+}
+function tabPinsPages(sel) {
+  const it = tabItem(sel), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
+  const nums = pref("tabNums", "1") !== "0";
+  const left = `${tabHead(2, "성막 전경 — 번호를 눌러 보기", "광야에 세워진 성막 · 문에서 지성소까지")}
+    <div class="tw-fig">${tabFig(it.n, nums)}<a class="tpic-zoom" href="#/t/zoom/3">${icon("zoom")} 크게 보기</a></div>
+    <div class="tw-figbar"><button class="chip small" type="button" data-act="tabnums">${nums ? "번호 끄기" : "번호 켜기"}</button>
+      <span>책자 그림 그대로: <a href="#/t/zoom/2">성막 전경</a> · <a href="#/t/zoom/1">기구 그림</a></span></div>
+    <div class="tw-pickh">여덟 기구 고르기 <span>그림의 번호를 눌러도 돼요</span></div>
+    <div class="tw-pick" role="group" aria-label="기구 고르기">${TAB_ITEMS.map((x) => `<button type="button" data-pin="${x.n}" aria-pressed="${x.n === it.n}"><img src="${tabImg(x)}" alt="" loading="lazy"><span><i>${x.n}</i>${esc(x.name.split(" · ")[0])}</span></button>`).join("")}</div>`;
+  const right = `<div class="tw-detail">
+      <a class="tw-big" href="#/t/item/${it.n}" aria-label="${esc(it.name)} 크게 보기"><img src="${tabImg(it, true)}" alt=""><i>${icon("zoom")}</i></a>
+      <span class="tw-place"><i>${it.n}</i>${esc(it.place)}</span>
+      <h2 class="tw-name">${esc(it.name)}</h2>
+      <p class="tw-line">${esc(it.line)}</p>
+      <span class="tw-ref">${esc(it.ref)}</span>
+      <div id="tpGo" class="tw-go">${it.group ? "" : `<p class="tp-none">그림에서 함께 보는 기구예요. 3권 단계에는 이 기구의 본문이 따로 없어요.</p>`}</div>
+      <div class="tw-pn"><button class="linkbtn" type="button" data-pin="${prev.n}">‹ ${esc(prev.name)}</button><button class="linkbtn" type="button" data-pin="${next.n}">${esc(next.name)} ›</button></div>
+    </div>`;
+  return { left, right, it, prev, next };
+}
+// 기구 하나: 왼쪽 = 크게 (두 손가락 · 휠 · ±), 오른쪽 = 말씀 · 외울 단계 · 다른 기구
+function tabItemPages(n) {
+  const it = tabItem(n), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
+  const left = `<div class="tw-zoom"><div class="tv-stage tw-stage" id="tvStage"><img id="tvImg" src="${tabImg(it)}" data-ar="1" alt="${esc(it.name)}" draggable="false"></div>
+      <div class="tw-zctl"><button type="button" data-act="tvz" data-v="0.66" aria-label="작게">−</button><button type="button" class="pct" data-act="tvz" data-v="0" id="tvPct">100%</button><button type="button" data-act="tvz" data-v="1.5" aria-label="크게">+</button></div>
+      <p class="tw-tip">두 손가락으로 벌리거나 두 번 톡 · 마우스 휠 · 끌어서 옮기기</p></div>`;
+  const right = `<div class="tw-detail">
+      <span class="tw-place"><i>${it.n}</i>${esc(it.place)}</span>
+      <h2 class="tw-name">${esc(it.name)}</h2>
+      <p class="tw-line">${esc(it.line)}</p>
+      <span class="tw-ref">${esc(it.ref)}</span>
+      <div id="tvGo" class="tw-go"></div>
+      <a class="tw-link" href="#/t/pins/${it.n}">${icon("next")} 성막 전경에서 이 기구 보기</a>
+    </div>
+    <div class="tw-pick" role="group" aria-label="기구 고르기">${TAB_ITEMS.map((x) => `<a href="#/t/item/${x.n}" data-nav="replace" aria-current="${x.n === it.n}"><img src="${tabImg(x)}" alt="" loading="lazy"><span><i>${x.n}</i>${esc(x.name.split(" · ")[0])}</span></a>`).join("")}</div>`;
+  return { left, right, it, prev, next };
+}
+function tabSpreadView(mode, n) {
+  const top = mode === "set" || mode === "pins0" ? libTop(true) : topBar(`3권 · <b>성막 그림</b>`, tabBack());
+  const cur = mode === "item" ? 1 : mode === "set" ? 1 : 2;
+  const P = mode === "set" ? tabSetPages() : mode === "item" ? tabItemPages(n) : tabPinsPages(n);
+  const fl = mode === "set" ? "성막 그림 1 / 2" : mode === "item" ? `기구 ${P.it.n} / 8` : "성막 그림 2 / 2";
+  const fr = mode === "set" ? `<button class="linkbtn" type="button" data-act="tabpic" data-v="2">다음 쪽 · 성막 전경 ›</button>`
+    : mode === "item" ? `<a class="linkbtn" href="#/t/item/${P.prev.n}" data-nav="replace">‹ ${esc(P.prev.name)}</a><span class="sep">·</span><a class="linkbtn" href="#/t/item/${P.next.n}" data-nav="replace">${esc(P.next.name)} ›</a>`
+    : `<button class="linkbtn" type="button" data-act="tabpic" data-v="0">다음 쪽 · 단계 · 진도 ›</button>`;
+  $app.innerHTML = openBook(top, `<div class="tw-page">${P.left}</div>`, `<div class="tw-page">${P.right}</div>`, tabBookTabs(cur), fl, fr, "tab-ob tw-" + mode);
+  // 오른쪽 목록에 손을 올리면 왼쪽 그림의 그 기구도 함께 떠오름
+  $app.querySelectorAll(".tw-row[data-n]").forEach((r) => {
+    const h = $app.querySelector(`.tp-hot[data-n="${r.dataset.n}"]`); if (!h) return;
+    r.addEventListener("pointerenter", () => h.classList.add("hl"));
+    r.addEventListener("pointerleave", () => h.classList.remove("hl"));
+  });
+  return P;
 }
 
 // ── 크게 보기: 두 손가락으로 벌리기 · 두 번 톡 · 끌어서 옮기기 · 마우스 휠 · +/− 단추
@@ -917,6 +992,14 @@ function viewTabZoom(k) {
   S.zoom.swap(P.hr);
 }
 async function viewTabItem(n) {
+  if (spreadMode()) {
+    const P = tabSpreadView("item", n);
+    S.zoom = zoomer(document.getElementById("tvStage"), document.getElementById("tvImg"), 4, (s) => { const e = document.getElementById("tvPct"); if (e) e.textContent = Math.round(s * 100) + "%"; });
+    S.zoom.swap(tabImg(P.it, true));
+    const rid = rendering, fp = await tabFirstPassage(P.it);
+    if (rid === rendering && fp) { const g = document.getElementById("tvGo"); if (g) g.innerHTML = `<a class="btn tp-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)} ${icon("next")}</a>`; }
+    return;
+  }
   const it = tabItem(n), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
   $app.innerHTML = `<div class="tv tv-item">
     <header class="tv-top"><a class="tv-x" href="${tabBack()}" data-act="tabclose" aria-label="닫기">${icon("close")}</a><span class="tv-pos">${it.n} / 8 · ${esc(it.place)}</span><span class="tv-sp"></span></header>
@@ -934,6 +1017,12 @@ async function viewTabItem(n) {
   if (rid === rendering && fp) { const g = document.getElementById("tvGo"); if (g) g.innerHTML = `<a class="tv-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)}</a>`; }
 }
 async function viewTabPins(n) {
+  if (spreadMode()) {
+    const P = tabSpreadView("pins", n); LIB.pinSel = P.it.n;
+    const rid = rendering, fp = await tabFirstPassage(P.it);
+    if (rid === rendering && fp) { const g = document.getElementById("tpGo"); if (g) g.innerHTML = `<a class="btn tp-go" href="#/p/3/${fp.num}/${fp.no}">이 말씀 외우러 가기 · ${esc(fp.label)} ${icon("next")}</a>`; }
+    return;
+  }
   const it = tabItem(n), i = it.n - 1, prev = TAB_ITEMS[(i + 7) % 8], next = TAB_ITEMS[(i + 1) % 8];
   const nums = pref("tabNums", "1") !== "0";
   const fig = `<svg class="tp-fig" viewBox="0 0 390 250" role="group" aria-label="성막 전경 — 번호를 눌러 기구 보기">
@@ -2130,7 +2219,11 @@ document.addEventListener("click", async (e) => {
   if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
   const t = e.target.closest("[data-act],[data-adm],[data-pin],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
   if (!t) return;
-  if (t.dataset.pin) { location.replace("#/t/pins/" + t.dataset.pin); return; }
+  if (t.dataset.pin) {
+    if (/^#\/b\//.test(location.hash)) { LIB.pinSel = Number(t.dataset.pin); render(); }
+    else location.replace("#/t/pins/" + t.dataset.pin);
+    return;
+  }
   if (t.dataset.act === "tabclose") { e.preventDefault(); if (S.tabFrom) history.back(); else location.replace(tabBack()); return; }
   if (t.dataset.adm) return admClick(t);
   if (t.dataset.tool) { PEN.tool = t.dataset.tool; setPref("penTool", PEN.tool); S.view.memoEdit = null; refreshPenBar(); refreshVerses(); return; }
@@ -2182,7 +2275,12 @@ document.addEventListener("click", async (e) => {
     case "theme": openThemePop(); break;
     case "themeclose": closeThemePop(); break;
     case "libflip": libTurn(() => { LIB.pg = (LIB.pg + 1) % libPages(LIB.vol).length; setPref("libPg", String(LIB.pg)); }); break;
-    case "tabpic": LIB.wpic = Number(t.dataset.v) || 0; render(); break;
+    case "tabpic": {
+      const v = Number(t.dataset.v) || 0;
+      if (/^#\/t\//.test(location.hash)) { LIB.nextPic = v; LIB.vol = "3"; location.hash = "#/b/3"; }
+      else { LIB.wpic = v; render(); }
+      break;
+    }
     case "tabnums": setPref("tabNums", pref("tabNums", "1") === "0" ? "1" : "0"); render(); break;
     case "tvz": if (S.zoom) S.zoom.zoom(Number(t.dataset.v)); break;
     case "openall": v.openAll = !v.openAll; v.open = new Set(); render(); break;

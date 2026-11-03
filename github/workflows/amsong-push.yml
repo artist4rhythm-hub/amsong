@@ -1,0 +1,121 @@
+# 말씀선포 아침 알림 — GitHub이 10분마다 이 파일을 실행해서, 관리자가 앱에서 정한 시각이 되면 알림을 보냅니다.
+# 이 저장소: .github/workflows/amsong-push.yml (이름과 자리를 그대로 지켜 주세요)
+# 필요한 비밀값: AMSONG_FIREBASE_SA = Firebase(amsong-99f03) 서비스 계정 키 파일(.json)의 내용 전체
+# 앱 전용 프로젝트(amsong-99f03)만 다룹니다. 다른 프로젝트의 키를 넣으면 아무것도 하지 않고 멈춰요.
+name: 말씀선포 아침 알림
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: amsong-push
+  cancel-in-progress: false
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 알림 보내기
+        env:
+          FIREBASE_SA: ${{ secrets.AMSONG_FIREBASE_SA }}
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then echo "비밀값 AMSONG_FIREBASE_SA 가 아직 없어요 (읽어보세요 문서 3번)"; exit 1; fi
+          mkdir -p run && cd run
+          npm init -y >/dev/null
+          npm i --silent --no-audit --no-fund firebase-admin@12 >/dev/null
+          cat > send.mjs <<'JS'
+          import admin from "firebase-admin";
+          const PROJECT = "amsong-99f03";
+          const sa = JSON.parse(process.env.FIREBASE_SA);
+          if (sa.project_id !== PROJECT) { console.error("앱 전용 프로젝트(" + PROJECT + ")의 키가 아니라서 멈춰요: " + sa.project_id); process.exit(1); }
+          admin.initializeApp({ credential: admin.credential.cert(sa), projectId: PROJECT });
+          const db = admin.firestore(), FV = admin.firestore.FieldValue;
+          const [owner, repo] = String(process.env.GITHUB_REPOSITORY || "artist4rhythm-hub/amsong").split("/");
+          const APP = `https://${owner.toLowerCase()}.github.io/${repo}/`;
+
+          const now = Date.now(), k = new Date(now + 9 * 3600e3);            // 한국 시각
+          const day = k.toISOString().slice(0, 10), dow = k.getUTCDay(), min = k.getUTCHours() * 60 + k.getUTCMinutes();
+          const hm = (t) => { const [h, m] = String(t || "").split(":").map(Number); return h * 60 + m; };
+
+          const cfg = (await db.doc("amsong_config/push").get()).data() || {};
+          const logRef = db.doc("amsong_config/pushLog");
+          const log = (await logRef.get()).data() || {};
+          const last = log.last || {};
+          // 정한 시각부터 90분 안에 한 번만 (GitHub 실행이 조금 늦어져도 보내고, 하루에 두 번은 안 보냄)
+          const due = (cfg.alarms || []).filter((a) => a && a.on !== false && (a.days || []).includes(dow)
+            && last[a.id] !== day && min >= hm(a.time) && min < hm(a.time) + 90);
+          const t = cfg.testReq;
+          const test = t && t.uid && t.at && (!log.testDone || t.at > log.testDone) && now - t.at < 3 * 3600e3 ? t : null;
+
+          // 먼저 '보냄'으로 적어 두기 (두 번 보내지 않게)
+          const mark = { lastRunAt: FV.serverTimestamp() };
+          if (due.length) mark.last = { ...last, ...Object.fromEntries(due.map((a) => [a.id, day])) };
+          if (test) mark.testDone = test.at;
+          await logRef.set(mark, { merge: true });
+          if (!due.length && !test) { console.log("보낼 알림 없음 · " + day + " " + k.toISOString().slice(11, 16)); process.exit(0); }
+
+          const allow = {}; (await db.collection("amsong_allow").get()).docs.forEach((d) => { allow[d.id] = d.data(); });
+          const subs = (await db.collection("amsong_push").get()).docs.map((d) => ({ uid: d.id, ...d.data() }))
+            .filter((s) => s.on !== false && s.email && allow[s.email]);
+          const fill = (body, name) => name ? String(body).replace(/\{이름\}/g, name) : String(body).replace(/\{이름\}\s*님?\s*[,，]?\s*/g, "").replace(/\{이름\}/g, "");
+
+          async function send(label, id, title, body, list) {
+            const msgs = [], who = [];
+            list.forEach((s) => Object.entries(s.devices || {}).forEach(([key, dv]) => {
+              if (!dv || !dv.t) return;
+              msgs.push({ token: dv.t,
+                data: { title: String(title || "말씀선포"), body: fill(body, (allow[s.email] || {}).name || ""), link: APP, tag: "amsong-" + id },
+                webpush: { headers: { Urgency: "high", TTL: "21600" } } });
+              who.push([s.uid, key]);
+            }));
+            let sent = 0, failed = 0, removed = 0;
+            for (let i = 0; i < msgs.length; i += 500) {
+              const r = await admin.messaging().sendEach(msgs.slice(i, i + 500));
+              for (let j = 0; j < r.responses.length; j++) {
+                const x = r.responses[j];
+                if (x.success) { sent++; continue; }
+                failed++;
+                const code = (x.error && x.error.code) || "";
+                if (/registration-token-not-registered|invalid-registration-token/.test(code)) {
+                  const [uid, key] = who[i + j];
+                  await db.doc("amsong_push/" + uid).update({ ["devices." + key]: FV.delete() }).catch(() => {});
+                  removed++;
+                } else console.log("실패:", code, x.error && x.error.message);
+              }
+            }
+            console.log(`${label}: 보냄 ${sent} · 실패 ${failed} · 안 쓰는 기기 정리 ${removed}`);
+            return { at: now, id, label, sent, failed, removed };
+          }
+
+          const runs = [];
+          for (const a of due) runs.push(await send(`${a.time} ${a.title || "말씀선포"}`, a.id, a.title, a.body, subs));
+          if (test) {
+            const a = (cfg.alarms || [])[0] || { title: "말씀선포", body: "{이름}님, 오늘 말씀 선포 하셨나요?" };
+            runs.push(await send("시험 알림", "test", "[시험] " + (a.title || "말씀선포"), a.body, subs.filter((s) => s.uid === test.uid)));
+          }
+          await logRef.set({ runs: [...(log.runs || []), ...runs].slice(-20) }, { merge: true });
+          JS
+          node send.mjs
+
+      # 저장소에 한동안 변화가 없어도 GitHub이 예약 실행을 멈추지 않게 (하루 한 번, 새벽 3시쯤)
+      - name: 계속 켜 두기
+        if: github.event_name == 'schedule'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          H=$(TZ=Asia/Seoul date +%H); M=$(TZ=Asia/Seoul date +%M)
+          if [ "$H" = "03" ] && [ "$M" -lt 15 ]; then
+            gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/amsong-push.yml/enable" && echo "켜 두기 완료"
+          fi

@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.2.2";
+const VERSION = "2.2.3";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -47,12 +47,12 @@ function coverSvg(vol) {
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E6F0EB"/><stop offset="1" stop-color="#F2F0EB"/></linearGradient></defs>
     <g transform="scale(3.7770 3.7762) translate(-3 -3)"><rect width="154" height="216" fill="url(#${id})"/>${ridgeOf(vol)}</g>
     <image href="icons/crest.png" x="42" y="42" width="49" height="50"/>
-    <g font-family="'IBM Plex Sans KR', sans-serif" font-weight="700" fill="#1E3932" text-anchor="end">
+    <g font-family="'AmsongCover', 'MaruBuri', sans-serif" font-weight="700" fill="#1E3932" text-anchor="end">
       <text x="517" y="185" font-size="48" letter-spacing="-1.4">말씀암송</text>
       <text x="517" y="238" font-size="48" letter-spacing="-1.4">선포구절</text>
     </g>
     <rect x="447" y="259" width="70" height="25" rx="2" fill="#00704A"/>
-    <text x="482" y="277" font-family="'IBM Plex Sans KR', sans-serif" font-weight="700" font-size="15" fill="#FFFFFF" text-anchor="middle">제${esc(vol)}권</text>
+    <text x="482" y="277" font-family="'AmsongCover', 'MaruBuri', sans-serif" font-weight="700" font-size="15" fill="#FFFFFF" text-anchor="middle">제${esc(vol)}권</text>
   </svg>`;
 }
 // 진도 동그라미

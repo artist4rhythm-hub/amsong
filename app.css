@@ -1285,3 +1285,17 @@ html.sky-quiet #sky .sh { opacity: 0; }
   .tw-pickh { padding-top: 10px; }
   .tw-name { font-size: 27px; } .tw-line { font-size: 19px; }
 }
+
+/* 2.3.0 — 선포가 붙은 안내 상자 · 성벽 기도 마침 · 성벽 기도 간증 */
+.pnote-box.say::before { content: '선포'; display: block; font-size: 11px; letter-spacing: .3em; font-weight: 700; color: var(--acc); margin-bottom: 3px; font-style: normal; }
+.endmark { margin-top: 22px; display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 700; color: var(--pri); letter-spacing: .16em; }
+.endmark::before, .endmark::after { content: ''; flex: 1; border-top: 1px solid var(--goldline); }
+.endmark span::before { content: '— '; color: var(--goldline); }
+.testi { font-size: calc(var(--fs, 18px) * .92); line-height: 1.85; }
+.testi .t-intro { padding: 12px 14px; border-radius: 6px; background: var(--note); color: var(--noteink); border: 1px solid var(--line); margin: 4px 0 18px; font-size: .94em; }
+.testi .t-h { margin: 26px 0 10px; padding-left: 10px; border-left: 3px solid var(--goldline); font-size: 1.05em; font-weight: 700; color: var(--pri); line-height: 1.45; }
+.testi .t-p { margin: 0 0 12px; word-break: keep-all; }
+.testi .t-q { margin: 6px 0 14px; padding: 6px 0 6px 13px; border-left: 3px solid var(--acc); color: var(--pri); font-weight: 600; word-break: keep-all; }
+.testi .t-qr { display: block; font-size: 12px; font-weight: 700; color: var(--acc); letter-spacing: .04em; margin-bottom: 2px; }
+.testi .qv { font-size: 10px; font-weight: 700; color: var(--acc); margin: 0 2px 0 3px; }
+.testi .t-q u { text-decoration-color: var(--goldline); text-underline-offset: 3px; }

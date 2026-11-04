@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.2.3";
+const VERSION = "2.3.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -640,7 +640,7 @@ function libStagesPage(vol, D) {
     ${weak.length ? `<div class="pg-sub">자주 틀리는 본문</div>${weak.map((w) =>
       `<a class="pg-weak" href="#/p/${w.vol}/${w.num}/${w.no}?m=hide"><b>${refHtml(w.ref)}</b><span class="wk-n">표시 ${w.total}곳</span></a>`).join("")}` : ""}
     <div class="pg-sub">함께 읽기</div>
-    <div class="pg-extras"><a href="#/x/${vol}/prayer">암송 기도문</a><a href="#/x/${vol}/slogans">개념 구호</a>${D.b.names ? `<a href="#/x/${vol}/names">하나님의 이름</a>` : ""}</div>`;
+    <div class="pg-extras"><a href="#/x/${vol}/prayer">암송 기도문</a><a href="#/x/${vol}/slogans">개념 구호</a>${D.b.names ? `<a href="#/x/${vol}/names">하나님의 이름</a>` : ""}${D.b.testimony ? `<a href="#/x/${vol}/testimony">${esc(D.b.testimony.title)}</a>` : ""}</div>`;
 }
 
 // 서재 머리줄 (책장 · 책 한 권 화면 같이 씀)
@@ -764,13 +764,13 @@ async function viewBookPage(vol, fresh) {
 const TAB_ITEMS = [
   // n, 열쇠, 이름, 자리, 예수님 말씀, 성경, 본문 소제목, 전경 그림 위 점(%) · 바깥 번호표 자리(px, 390×250 기준), 책자 기구 그림 자리(mm), 책자 전경 번호표(mm)
   { n: 1, key: "gate", name: "문", place: "뜰 · 동쪽", line: "예수님은 문이십니다", ref: "요 10:9 · 시 100", group: "문", sx: 84.64, sy: 74.21, lx: 360, ly: 196, r: [270, 99.84, 28, 24.32], b: [260.4, 132, 16] },
-  { n: 2, key: "altar", name: "번제단", place: "뜰", line: "예수님은 하나님의 어린 양, 그 피를 믿는 믿음이 구원합니다", ref: "벧전 1:19 · 롬 3:25", group: "번제단", sx: 74.22, sy: 59.08, lx: 360, ly: 120, r: [225, 85.21, 42, 41.58], b: [260.4, 110, 20] },
-  { n: 3, key: "laver", name: "물두멍", place: "뜰", line: "예수님은 깨끗하게 하시는 생수이십니다", ref: "렘 2:13 · 요일 1:9", group: "물두멍", sx: 57.62, sy: 56.64, lx: 238, ly: 16, r: [181, 96.09, 34, 31.81], b: [166.53, 42, 20] },
+  { n: 2, key: "altar", name: "번제단", place: "뜰", line: "예수님은 하나님의 어린양이시며, 그분이 흘리신 피를 믿음으로 우리는 구원받습니다", ref: "벧전 1:19 · 롬 3:25", group: "번제단", sx: 74.22, sy: 59.08, lx: 360, ly: 120, r: [225, 85.21, 42, 41.58], b: [260.4, 110, 20] },
+  { n: 3, key: "laver", name: "물두멍", place: "뜰", line: "예수님은 우리를 정결케 하시는 생명수이십니다", ref: "렘 2:13 · 요일 1:9", group: "물두멍", sx: 57.62, sy: 56.64, lx: 238, ly: 16, r: [181, 96.09, 34, 31.81], b: [166.53, 42, 20] },
   { n: 4, key: "table", name: "떡상", place: "성소", line: "예수님은 생명의 떡이십니다", ref: "요 6:47-51", group: "떡상", sx: 40.39, sy: 37.89, lx: 180, ly: 16, r: [100.36, 73, 31.27, 26], b: [135.55, 42, 16] },
   { n: 5, key: "lamp", name: "금촛대", place: "성소", line: "예수님은 세상의 빛이십니다", ref: "요 8:12", group: "금촛대", sx: 40.39, sy: 48.04, lx: 22, ly: 176, r: [102.88, 118.5, 26.24, 25], b: [42.65, 114, 20] },
   { n: 6, key: "incense", name: "금향단", place: "성소", line: "예수님은 우리를 위해 간구하시는 대제사장이십니다", ref: "히 7:24-26", group: "금향단", sx: 32.88, sy: 39.55, lx: 22, ly: 132, r: [77.5, 97.89, 21, 24.22], b: [42.65, 98, 20] },
-  { n: 7, key: "veil", name: "휘장", place: "성소와 지성소 사이", line: "예수님의 몸이 휘장입니다", ref: "히 10:19-22", group: "", sx: 28.12, sy: 29.30, lx: 122, ly: 16, r: [52, 97.51, 20, 20.99], b: [105.55, 42, 16] },
-  { n: 8, key: "ark", name: "언약궤 · 속죄소", place: "지성소", line: "속죄소에 뿌려진 예수님의 피, 아버지 우편에 계신 예수님", ref: "히 9:11-12 · 엡 1:19-21 · 골 3:1-3", group: "", sx: 19.53, sy: 32.71, lx: 22, ly: 88, r: [15, 95.54, 38, 24.92], b: [33.3, 82, 30] }
+  { n: 7, key: "veil", name: "휘장", place: "성소와 지성소 사이", line: "예수님의 몸은 휘장입니다", ref: "히 10:19-22", group: "", sx: 28.12, sy: 29.30, lx: 122, ly: 16, r: [52, 97.51, 20, 20.99], b: [105.55, 42, 16] },
+  { n: 8, key: "ark", name: "언약궤 · 속죄소", place: "지성소", line: "속죄소에 뿌려진 예수님의 보혈, 하나님 아버지의 우편에 앉아계신 예수님", ref: "히 9:11-12 · 엡 1:19-21 · 골 3:1-3", group: "", sx: 19.53, sy: 32.71, lx: 22, ly: 88, r: [15, 95.54, 38, 24.92], b: [33.3, 82, 30] }
 ];
 const TAB_PIC = {
   1: { name: "기구 그림", sub: "여덟 기구가 말하는 예수님", s: "tab/set1_s.jpg", m: "tab/set1_m.jpg", hr: "tab/set1.jpg", ar: 308 / 216 },
@@ -1122,10 +1122,13 @@ function stageList(vol, st, curNo) {
       <span class="nv">${p.verses.length}절</span>
       <span class="ck${on ? " on" : ""}" aria-label="${on ? "외움" : "아직"}">${on ? icon("check") : ""}</span></a>`;
   }
+  const bk = S.books[vol], testi = bk && bk.testimony && bk.stages && bk.stages[bk.stages.length - 1].num === st.num;
+  if ((st.lists || []).length || testi) out += `<span class="g-head">부록</span>`;
   (st.lists || []).forEach((l, k) => {
     out += `<span class="t-head">${esc(l.title)}</span><a class="srow" href="#/l/${vol}/${st.num}/${k + 1}">
       <span class="no"></span><span class="ref">회개 기도</span><span class="nv"></span><span></span></a>`;
   });
+  if (testi) out += `<a class="srow" href="#/x/${vol}/testimony"><span class="no"></span><span class="ref">${esc(bk.testimony.title)}</span><span class="nv"></span><span></span></a>`;
   return `<div class="slist">${out}</div>`;
 }
 
@@ -1195,10 +1198,15 @@ function headHtml(st, p) {
     <h1 class="ptitle">${refHtml(p.ref)}${p.note ? `<span class="pnote">${esc(p.note)}</span>` : ""}</h1>`;
 }
 
+// 본문 뒤 글: 선포(decl) · 안내(note) · 선포가 붙은 안내 상자(say) · 마침 표시(end)
+function afterBox(a) {
+  const t = a.lines.map(esc).join("<br>");
+  if (a.kind === "decl") return `<div class="decl ns">${t}</div>`;
+  if (a.kind === "end") return `<div class="endmark"><span>${t}</span></div>`;
+  return `<div class="pnote-box ns${a.kind === "say" ? " say" : ""}">${t}</div>`;
+}
 function afterHtml(p) {
-  return p.after.map((a) => a.kind === "decl"
-    ? `<div class="decl ns">${a.lines.map(esc).join("<br>")}</div>`
-    : `<div class="pnote-box ns">${a.lines.map(esc).join("<br>")}</div>`).join("");
+  return p.after.map(afterBox).join("");
 }
 
 function versesRead(p, weak, nt) {
@@ -1417,8 +1425,7 @@ const bkRun = (p) => `<div class="bk-run">${refHtml(p.ref)}<span> · 이어서</
 const bkLine = (p, vi, li, weak, nt, mode, v) => mode === "read" ? readLine(p, vi, li, weak, nt) : hideLine(p, weak, v, vi, li, p.id + "|");
 function afterItem(p, k, mode) {
   if (k === "c") return `<div class="closing">— ${refHtml(p.ref)}</div>`;
-  const a = p.after[k];
-  return a.kind === "decl" ? `<div class="decl ns">${a.lines.map(esc).join("<br>")}</div>` : `<div class="pnote-box ns">${a.lines.map(esc).join("<br>")}</div>`;
+  return afterBox(p.after[k]);
 }
 const afterKeys = (p, mode) => [...(mode === "read" ? ["c"] : []), ...p.after.map((a, i) => i)];
 const notesSig = (st) => st.passages.map((p) => { const n = NOTES[p.id]; return n ? Object.keys(n.memo).length + ":" + Object.values(n.memo).join("").length : 0; }).join(",") + "|" + (S.view.memoEdit || "");
@@ -1738,6 +1745,13 @@ async function viewExtra(vol, kind) {
     title = "암송 선포 개념 구호";
     inner = `<div class="plain-lines">${b.slogans.map((s, i) => `<div class="slogan"><span class="n">${i + 1}</span>
       <div><b>말씀암송은</b><br>${esc(s.text).replace(/\n/g, "<br>")} <small>(${esc(s.ref)})</small></div></div>`).join("")}</div>`;
+  } else if (kind === "testimony" && b.testimony) {
+    title = b.testimony.title;
+    const inl = (t) => esc(t).replace(/_([^_]+)_/g, "<u>$1</u>").replace(/\{v:(\d+)\}/g, '<sup class="qv">$1</sup>');
+    inner = `<div class="testi">${b.testimony.blocks.map((x) => x.t === "intro" ? `<div class="t-intro ns">${inl(x.text)}</div>`
+      : x.t === "h" ? `<h2 class="t-h">${inl(x.text)}</h2>`
+      : x.t === "q" ? `<blockquote class="t-q"><span class="t-qr">${esc(x.ref)}</span>${inl(x.text)}</blockquote>`
+      : `<p class="t-p">${inl(x.text)}</p>`).join("")}</div>`;
   } else if (kind === "names" && b.names) {
     title = "하나님의 이름";
     inner = `<div class="plain-lines">${b.names.lines.map((l) => `<span class="ln">${esc(l)}</span>`).join("")}</div>

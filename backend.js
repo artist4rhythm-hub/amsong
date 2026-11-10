@@ -158,6 +158,25 @@ export const logView = (user, ref, mem) => setDoc(doc(db, "amsong_stats_users", 
   email: lower(user.email), views: increment(1), lastRef: String(ref || "").slice(0, 80), lastAt: serverTimestamp(), ...(typeof mem === "number" ? { mem } : {})
 }, { merge: true });
 export const logMem = (user, mem) => setDoc(doc(db, "amsong_stats_users", user.uid), { email: lower(user.email), mem }, { merge: true });
+// ── 사용 현황 (2.4 · 관리자만 봄)
+//  amsong_usage/{uid}_{날짜}: 사람 한 명의 하루치 — 연 횟수 · 사용 분 · 시간대 · 화면 · 누른 기능 · 펼친 단계 · 오류 종류 · 기기 · 버전
+//  기기 메모리에 모았다가 '더하기'로 올림 (먼저 읽지 않음)
+export async function addUsage(user, day, info, P) {
+  const inc = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, increment(v)]));
+  const d = { uid: user.uid, email: lower(user.email), name: String(info.name || "").slice(0, 60), date: day,
+    device: String(info.device || "").slice(0, 20), ver: String(info.ver || "").slice(0, 20), os: String(info.os || "").slice(0, 20),
+    br: String(info.br || "").slice(0, 30), pwa: !!info.pwa, lastAt: serverTimestamp() };
+  if (P.opens) d.opens = increment(P.opens);
+  if (P.mins) d.mins = increment(P.mins);
+  if (P.loadMs) { d.loadSum = increment(P.loadMs); d.loadN = increment(1); }
+  ["screens", "acts", "hours", "errs", "stg"].forEach((k) => { if (Object.keys(P[k] || {}).length) d[k] = inc(P[k]); });
+  await setDoc(doc(db, "amsong_usage", `${user.uid}_${day}`), d, { merge: true });
+}
+export async function listUsage(n = 30) {
+  const from = kstDay(Date.now() - (n - 1) * 86400e3);
+  const s = await getDocs(query(collection(db, "amsong_usage"), where("date", ">=", from)));
+  return s.docs.map((d) => d.data());
+}
 export async function listStatsUsers() {
   const s = await getDocs(collection(db, "amsong_stats_users"));
   return s.docs.map((d) => ({ uid: d.id, ...d.data() }));

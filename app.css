@@ -1299,3 +1299,75 @@ html.sky-quiet #sky .sh { opacity: 0; }
 .testi .t-qr { display: block; font-size: 12px; font-weight: 700; color: var(--acc); letter-spacing: .04em; margin-bottom: 2px; }
 .testi .qv { font-size: 10px; font-weight: 700; color: var(--acc); margin: 0 2px 0 3px; }
 .testi .t-q u { text-decoration-color: var(--goldline); text-underline-offset: 3px; }
+
+/* 2.4 — 사용 현황 (관리) */
+.us-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.us-bar .sp { flex: 1; }
+.us-bar .btn .i { width: 16px; height: 16px; }
+.seg { display: inline-flex; padding: 3px; border-radius: 20px; background: var(--chip); gap: 2px; }
+.seg button { border: 0; background: transparent; color: var(--sub); font: inherit; font-size: 13.5px; font-weight: 600; min-height: 34px; padding: 0 14px; border-radius: 17px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surf); color: var(--pri); box-shadow: 0 1px 3px rgba(30, 57, 50, .15); }
+.seg.mini button { min-height: 28px; font-size: 12.5px; padding: 0 10px; }
+.us-note { font-size: 12.5px; color: var(--sub); line-height: 1.6; margin: 8px 0 0; }
+.us-note b { color: var(--ink); }
+.us-tiles { margin-top: 12px; }
+@media (min-width: 700px) { .us-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tile b small { font-size: 15px; color: var(--sub); font-weight: 600; }
+.tile.warn { background: var(--note); border-color: #EAD9B0; }
+.tile.warn b { color: var(--noteink); }
+.tile.bad { background: var(--miss-bg); border-color: #F2C7AE; }
+.tile.bad b { color: var(--miss-ink); }
+.us-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+@media (min-width: 760px) { .us-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .us-wide { grid-column: 1 / -1; } }
+.us-card { padding: 14px 16px 16px; border-radius: 10px; background: var(--surf); border: 1px solid var(--line); min-width: 0; }
+.us-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 10px; }
+.us-h h3 { margin: 0; font-size: 15.5px; font-weight: 700; color: var(--pri); }
+.us-h .muted { font-size: 12px; margin-left: auto; }
+.us-h select { width: auto; margin-left: auto; height: 36px; font-size: 13px; padding: 0 28px 0 10px; }
+.us-empty { font-size: 13px; margin: 4px 0 0; }
+.us-chart { position: relative; padding-bottom: 18px; }
+.us-svg { display: block; width: 100%; height: 170px; }
+.us-svg .gl { stroke: var(--line2); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.us-svg rect { fill: var(--acc); opacity: .55; }
+.us-svg rect.sun { opacity: 1; }
+.us-svg rect.now { fill: var(--gold); opacity: 1; }
+.us-svg rect:hover { fill: var(--pri); opacity: 1; }
+.us-x { position: absolute; left: 0; right: 0; bottom: 0; height: 16px; }
+.us-x span { position: absolute; transform: translateX(-50%); font-size: 10.5px; color: var(--sub); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hm { display: grid; grid-template-columns: 18px repeat(24, minmax(0, 1fr)); gap: 2px; align-items: center; }
+.hm .hx { font-size: 9.5px; color: var(--sub); text-align: left; height: 12px; line-height: 12px; }
+.hm .hy { font-size: 11px; color: var(--sub); }
+.hm i { display: block; aspect-ratio: 1; border-radius: 2px; background: var(--acc); opacity: var(--a); min-height: 8px; }
+.hm i.z { background: var(--line2); opacity: 1; }
+.us-lab { margin: 12px 0 5px; font-size: 12px; font-weight: 700; color: var(--sub); letter-spacing: .02em; }
+.us-lab:first-of-type { margin-top: 0; }
+.us-stack { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--line2); gap: 2px; }
+.us-stack i { display: block; height: 100%; background: var(--acc); opacity: var(--o); }
+.us-stack i.hl { background: var(--gold); opacity: 1; }
+.us-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 12.5px; color: var(--sub); }
+.us-leg span { display: inline-flex; align-items: center; gap: 5px; }
+.us-leg i { width: 9px; height: 9px; border-radius: 2px; background: var(--acc); opacity: var(--o); }
+.us-leg span.hl i { background: var(--gold); opacity: 1; }
+.us-leg b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.us-hb { display: grid; gap: 7px; }
+.us-hb .hb { display: grid; grid-template-columns: minmax(84px, 38%) minmax(0, 1fr) 46px; align-items: center; gap: 8px; font-size: 13px; }
+.us-hb .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.us-hb .track { height: 10px; border-radius: 5px; background: var(--line2); overflow: hidden; }
+.us-hb .track i { display: block; height: 100%; border-radius: 5px; background: var(--acc); }
+.us-hb .n { text-align: right; color: var(--sub); font-variant-numeric: tabular-nums; }
+.us-hints { display: grid; gap: 16px; }
+@media (min-width: 760px) { .us-hints { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.us-hints .us-lab { margin-top: 0; }
+.us-tbl td.n, .us-tbl th.n { text-align: right; }
+.us-tbl td.t { white-space: normal; min-width: 110px; font-size: 12.5px; color: var(--sub); }
+.us-tbl td.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: var(--ink); }
+.us-tbl tr.warn td:first-child .nm { color: var(--noteink); }
+.us-tbl .chip { border: 0; display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 12px; background: var(--chip); color: var(--sub); min-height: 0; }
+.us-tbl .chip.ok { background: var(--band); color: var(--acc); font-weight: 700; }
+.us-tbl .chip.warn { background: var(--note); color: var(--noteink); font-weight: 700; }
+.tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--band); color: var(--acc); line-height: 18px; }
+.tag.old { background: var(--note); color: var(--noteink); }
+.us-priv { display: flex; gap: 10px; align-items: flex-start; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--surf2); border: 1px solid var(--line); font-size: 12.5px; color: var(--sub); line-height: 1.6; }
+.us-priv .i { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--acc); }
+.us-priv p { margin: 2px 0 0; }
+.us-priv b { color: var(--ink); }

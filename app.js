@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.3.0";
+const VERSION = "2.4.0";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -106,7 +106,8 @@ const ICON = {
   trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   zoom: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
-  refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>'
+  refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
 };
 const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 
@@ -553,6 +554,96 @@ function logViewOnce(p) {
   VIEWED.add(p.id);
   B.logView(S.user, String(p.ref || "").replace(/Ⓐ/g, ""), Object.keys(S.userDoc.memorized || {}).length).catch(() => {});
 }
+
+// ───────── 사용 현황 (관리자 통계용 · 2.4) — '목자의 삶'과 같은 방식
+//  화면을 열 때마다 서버에 쓰면 쓰기 횟수가 금세 한도에 닿으므로, 기기 메모리에 모았다가
+//  1분마다 · 화면을 덮을 때 한 번에 '더하기'로 올림 (먼저 읽지 않음 → 읽기 한도도 아낌)
+//  사람 한 명의 하루치가 칸 하나: amsong_usage/{uid}_{날짜}
+//  본문 글 · 형광펜 · 메모 글 · 녹음 · 위치는 모으지 않음 (화면 이름 · 누른 횟수 · 사용 분 · 시간대 · 기기 · 오류 종류만)
+const USG = { screens: {}, acts: {}, hours: {}, errs: {}, stg: {}, opens: 1, mins: 0, loadMs: 0, loaded: false, cur: "", key: "", dirty: false, lastAct: Date.now(), hiddenAt: 0, errSeen: new Set() };
+const usgOn = () => !!(S.user && (S.allow || S.admin));
+const kstHour = () => String(new Date(Date.now() + 9 * 3600e3).getUTCHours());
+function uBump(kind, k) {
+  if (kind === "screen") { USG.cur = k; if (!USG.loaded) { USG.loaded = true; USG.loadMs = Math.round(performance.now()); } }
+  if (!usgOn() || !k) return;
+  const m = kind === "screen" ? USG.screens : kind === "stg" ? USG.stg : USG.acts;
+  m[k] = (m[k] || 0) + 1; USG.dirty = true;
+}
+// 오류 — 메일 · 주소 · 긴 번호는 지우고 '어느 화면에서 어떤 오류'인지만 셈
+function uErr(e) {
+  let k = String((e && (e.code || e.message)) || e || "").trim(); if (!k) return;
+  k = k.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "@").replace(/https?:\/\/\S+/g, "주소").replace(/[A-Za-z0-9]{16,}/g, "#")
+    .replace(/[.\/`\[\]~*\\]/g, "·").replace(/^_+|_+$/g, "").replace(/\s+/g, " ").slice(0, 70).trim();
+  if (!k) return;
+  k = `${USG.cur || "앱"} | ${k}`;
+  if (!USG.errSeen.has(k) && USG.errSeen.size >= 15) k = "앱 | 그 밖의 오류";   // 하루 칸이 넘치지 않게
+  USG.errSeen.add(k);
+  USG.errs[k] = (USG.errs[k] || 0) + 1; USG.dirty = true;
+}
+["pointerdown", "keydown", "wheel", "touchstart"].forEach((ev) => window.addEventListener(ev, () => { USG.lastAct = Date.now(); }, { passive: true, capture: true }));
+// 실제로 손을 댄 분만 '사용 시간'으로 — 켜 두기만 한 시간은 세지 않음 (1분 안에 손댄 적 있으면 1분)
+setInterval(() => {
+  if (document.hidden || !usgOn() || Date.now() - USG.lastAct > 60000) return;
+  const h = kstHour(); USG.mins++; USG.hours[h] = (USG.hours[h] || 0) + 1; USG.dirty = true;
+}, 60000);
+window.addEventListener("error", (e) => { if (e && e.message) uErr({ message: e.message }); });
+window.addEventListener("unhandledrejection", (e) => { uErr(e && e.reason); });
+function usgEnv() {
+  const E = envInfo(), ua = navigator.userAgent || "", w = Math.min(screen.width || 0, screen.height || 0);
+  const device = E.ipad ? "패드" : (E.ios || E.android) ? (w && w >= 600 ? "패드" : "폰") : "컴퓨터";
+  const os = E.ios ? "iOS" : E.android ? "안드로이드" : /CrOS/.test(ua) ? "크롬북" : /Mac/.test(ua) ? "맥" : /Win/.test(ua) ? "윈도우" : "기타";
+  return { device, os, br: E.browser.replace(" 브라우저", ""), pwa: !!E.app };
+}
+async function flushUsage() {
+  if (!USG.dirty || !usgOn()) return;
+  const P = { screens: USG.screens, acts: USG.acts, hours: USG.hours, errs: USG.errs, stg: USG.stg, opens: USG.opens, mins: USG.mins, loadMs: USG.loadMs };
+  USG.screens = {}; USG.acts = {}; USG.hours = {}; USG.errs = {}; USG.stg = {}; USG.opens = 0; USG.mins = 0; USG.loadMs = 0; USG.dirty = false;
+  try {
+    const nm = (S.allow && S.allow.name) || S.user.name || "";
+    await B.addUsage(S.user, B.kstDay(), { name: nm, ver: VERSION, ...usgEnv() }, P);
+  } catch (e) {
+    // 못 올려도 앱은 그대로 — 다음 번에 다시 모아서 올림 (오류 칸은 다시 넣지 않음: 오류 때문에 사용 기록까지 막히지 않게)
+    ["screens", "acts", "hours", "stg"].forEach((k) => { Object.entries(P[k]).forEach(([x, v]) => { USG[k][x] = (USG[k][x] || 0) + v; }); });
+    USG.opens += P.opens; USG.mins += P.mins; USG.loadMs = USG.loadMs || P.loadMs; USG.dirty = true;
+  }
+}
+setInterval(flushUsage, 60000);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { USG.hiddenAt = Date.now(); flushUsage(); return; }
+  // 30분 넘게 덮어 뒀다가 다시 열면 '한 번 더 연 것'으로
+  if (USG.hiddenAt && Date.now() - USG.hiddenAt > 30 * 60000) { USG.opens++; USG.dirty = true; }
+  USG.lastAct = Date.now();
+});
+window.addEventListener("pagehide", flushUsage);
+// 지금 화면의 이름 (같은 화면을 다시 그릴 때는 세지 않음 · 본문은 보는 방식까지)
+function usgScreen(parts, q) {
+  const [r, , b2] = parts;
+  const k = !r ? "lib" : r === "b" ? "book" : r === "s" ? "stage"
+    : r === "p" ? "p_" + (MODES.some((m) => m.id === q.m) ? q.m : pref("mode", "read"))
+    : r === "x" ? "x_" + (b2 || "") : r === "l" ? "list" : r === "t" ? "tab" : r;
+  const key = location.hash.split("?")[0] + "|" + k;
+  if (key !== USG.key) { USG.key = key; uBump("screen", k); if (r === "p") uBump("stg", parts[1] + "_" + parts[2]); }
+}
+// 누른 기능 (횟수만)
+function usgClick(t) {
+  const d = t.dataset;
+  const k = d.act === "memo" ? (memorized(d.pid || (S.ctx && S.ctx.p && S.ctx.p.id)) ? "memoOff" : "memoOn")
+    : d.act === "bkprev" || d.act === "bknext" ? "bkflip"
+    : d.act && ACT_NAME[d.act] ? d.act
+    : d.pref ? "pref_" + d.pref : d.hide ? "hideWay" : d.line ? "lineOpen" : d.tok ? "recMark" : d.say ? "sayStep"
+    : d.tool ? "penTool" : d.memo ? "memoOpen" : d.pin ? "tabPin" : "";
+  if (k) uBump("act", k);
+}
+const SCREEN_NAME = { lib: "서재", book: "책 펼침", stage: "단계 구절표", p_read: "본문 · 읽기", p_hide: "본문 · 가리기", p_say: "본문 · 선포", p_rec: "본문 · 녹음 채점",
+  x_prayer: "암송 기도문", x_slogans: "개념 구호", x_names: "하나님의 이름", x_testimony: "성벽 기도 간증", list: "회개 기도", tab: "성막 그림", settings: "설정", admin: "관리" };
+const SCREEN_SKIP = new Set(["admin"]);   // 개선 힌트에서 빼는 화면 (관리자만 여는 곳)
+const ACT_NAME = { memoOn: "외웠어요 표시", memoOff: "외웠어요 풀기", pen: "형광펜 · 밑줄 열기", penTool: "펜 바꿈", penclear: "표시 모두 지움",
+  memoOpen: "메모 열기", memosave: "메모 저장", memodel: "메모 지움", hideWay: "가리는 방법 바꿈", lineOpen: "가린 줄 열기", openall: "가린 곳 모두 열기",
+  sayStep: "선포 넘기기", recstart: "녹음 시작", recMark: "채점 표시", recsave: "채점 저장", recagain: "다시 녹음", bkflip: "책 쪽 넘김", swipe: "밀어서 넘기기",
+  libflip: "서재 쪽 넘김", tabpic: "성막 그림 고르기", tabPin: "성막 번호 누름", tvz: "성막 그림 확대", tabnums: "성막 번호 켜고 끔",
+  pref_theme: "화면 색 바꿈", pref_size: "글자 크기 바꿈", pref_mode: "기본 보기 방식 바꿈", pref_stars: "별 배경 바꿈", pref_replist: "회개 목록 보기 바꿈",
+  theme: "화면 색 고르기 열기", install: "앱 설치", pushon: "알림 켬", pushoff: "알림 끔", drawer: "구절표 서랍 열기" };
+const actName = (k) => ACT_NAME[k] || (k.startsWith("pref_") ? "설정 바꿈 · " + k.slice(5) : k);
 
 // 책장 위 작은 안내 띠: 설치 → (설치했으면) 알림 켜기 — 닫으면 다시 안 보임
 function shelfNudge() {
@@ -1818,11 +1909,12 @@ async function viewSettings() {
     <p class="muted colo">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>`));
 }
 
-// ───────── 관리자 (사람 관리 · 열람 요청 · 접속 통계 · 아침 알림 · 본문 올리기)
+// ───────── 관리자 (사람 관리 · 열람 요청 · 사용 현황 · 아침 알림 · 본문 올리기)
 const GROUPS0 = ["교사", "학부모", "학생", "성도", "기타"];
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const ALARM0 = () => ({ id: "a" + Date.now().toString(36), on: true, time: "07:00", days: [0, 1, 2, 3, 4, 5, 6], title: "말씀선포", body: "{이름}님, 오늘 말씀 선포 하셨나요?" });
-const ADM = { tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null };
+const ADM = { tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null,
+  us: { days: 30, grp: "*", metric: "users", sort: "quiet", cache: {}, dcache: {}, err: false } };
 const tsMs = (t) => !t ? 0 : typeof t === "number" ? t : t.toMillis ? t.toMillis() : t.seconds ? t.seconds * 1000 : t instanceof Date ? t.getTime() : 0;
 function ago(t) {
   const ms = tsMs(t); if (!ms) return "";
@@ -1858,9 +1950,10 @@ async function viewAdmin(q = {}) {
   if (q.t) ADM.tab = q.t;
   if (!ADM.data) $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/"), tome(`<p class="muted">불러오는 중…</p>`));
   const D = await admLoad();
+  if (ADM.tab === "stats") await admUsage();
   if (rid !== rendering) return;
   const tabs = [["people", `사람 <small>${D.rows.length}</small>`], ["req", `열람 요청${D.reqs.length ? ` <em class="badge">${D.reqs.length}</em>` : ""}`],
-    ["stats", "접속 통계"], ["alarm", "아침 알림"], ["content", "본문 올리기"]];
+    ["stats", "사용 현황"], ["alarm", "아침 알림"], ["content", "본문 올리기"]];
   const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "content" ? admContent() : admPeople(D);
   $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/", `<button class="iconbtn" type="button" data-adm="reload" aria-label="새로 불러오기">${icon("refresh")}</button>`), tome(`
     <nav class="adm-tabs adm-top" role="tablist" aria-label="관리 메뉴">${tabs.map(([id, lb]) =>
@@ -1987,52 +2080,196 @@ function admReq(D) {
     </form>`).join("")}`;
 }
 
-// ── 접속 통계
+// ── 사용 현황 (2.4 — '목자의 삶'과 같은 방식) · 2.0부터 모인 접속 기록도 함께
+//  기간 안의 칸만 읽음 (기간 × 사람 수) · 한 번 읽으면 [새로 읽기] 전까지 다시 안 읽음
+const US_PERIOD = [[7, "7일"], [30, "30일"], [90, "90일"]];
+const nf = (n) => Number(n || 0).toLocaleString("ko-KR");
+const minTxt = (m) => !m ? "0분" : m < 60 ? `${Math.round(m)}분` : `${Math.floor(m / 60)}시간${Math.round(m % 60) ? ` ${Math.round(m % 60)}분` : ""}`;
+const dayMinus = (n) => B.kstDay(Date.now() - n * 86400e3);
+const daysAgo = (day) => Math.round((Date.parse(B.kstDay() + "T00:00Z") - Date.parse(day + "T00:00Z")) / 86400e3);
+const fmtDay = (d) => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+const sumObj = (o) => Object.values(o || {}).reduce((n, v) => n + (Number(v) || 0), 0);
+const addObj = (a, b) => { Object.entries(b || {}).forEach(([k, v]) => { a[k] = (a[k] || 0) + (Number(v) || 0); }); return a; };
+async function admUsage(force) {
+  const U = ADM.us;
+  if (force) { U.cache = {}; U.dcache = {}; }
+  if (!U.cache[U.days]) {
+    await flushUsage();
+    const [u, d] = await Promise.all([B.listUsage(U.days).catch(() => null), B.listStatsDays(U.days).catch(() => [])]);
+    U.cache[U.days] = u || []; U.dcache[U.days] = d || []; U.err = !u;
+  }
+}
+function usStats(D) {
+  const U = ADM.us, days = U.days, today = B.kstDay(), w7 = dayMinus(6), from = dayMinus(days - 1);
+  const grpOf = (email) => ((D.rows.find((r) => r.email === email) || {}).group || "");
+  const reg = D.rows.filter((r) => U.grp === "*" || (r.group || "") === U.grp);
+  const regE = new Set(reg.map((r) => r.email));
+  const uidE = {}; D.stats.forEach((x) => { if (x.email) uidE[x.uid] = x.email; });
+  const rows = (U.cache[days] || []).filter((x) => regE.has(x.email));
+  rows.forEach((x) => { uidE[x.uid] = x.email; });
+  const dayList = []; for (let i = days - 1; i >= 0; i--) dayList.push(dayMinus(i));
+  const byDay = Object.fromEntries(dayList.map((d) => [d, { users: new Set(), mins: 0, opens: 0, seen: new Set() }]));
+  const people = {};
+  const P = (uid) => people[uid] = people[uid] || { uid, email: uidE[uid], days: new Set(), mins: 0, opens: 0, acts: 0, screens: {}, last: "", L: null };
+  rows.forEach((x) => {
+    const B0 = byDay[x.date]; if (B0) { B0.users.add(x.uid); B0.mins += x.mins || 0; B0.opens += x.opens || 0; B0.seen.add(x.uid); }
+    const p = P(x.uid); p.days.add(x.date); p.mins += x.mins || 0; p.opens += x.opens || 0; p.acts += sumObj(x.acts); addObj(p.screens, x.screens);
+    if (x.date >= p.last) { p.last = x.date; p.L = x; }
+  });
+  // 2.0부터 모인 '날짜별 접속' — 사용 현황 칸이 없는 날(2.4 이전)도 사람 수 · 연 횟수에 넣음
+  (U.dcache[days] || []).forEach((x) => { const B0 = byDay[x.day]; if (!B0) return;
+    Object.entries(x.u || {}).forEach(([uid, n]) => { if (!regE.has(uidE[uid])) return;
+      B0.users.add(uid); if (!B0.seen.has(uid)) B0.opens += Number(n) || 0;
+      const p = P(uid); p.days.add(x.day); if (x.day > p.last) p.last = x.day; }); });
+  return { U, days, today, w7, from, reg, regE, rows, dayList, byDay, people, grpOf };
+}
 function admStats(D) {
-  const now = Date.now(), within = (d) => (s) => now - tsMs(s.lastAt) < d * 86400e3;
-  const reg = new Set(D.rows.map((r) => r.email)), st = D.stats.filter((s) => reg.has(s.email));
-  const today = B.kstDay(), tSet = new Set(Object.keys((D.days.find((x) => x.day === today) || { u: {} }).u));
-  const w7 = st.filter(within(7)).length, w30 = st.filter(within(30)).length;
-  const devs = D.subs.reduce((a, s) => a + Object.keys(s.devices || {}).length, 0), subsN = D.subs.filter((s) => Object.keys(s.devices || {}).length).length;
-  // 날짜별 막대 (최근 30일)
-  const days = []; for (let i = 29; i >= 0; i--) { const day = B.kstDay(now - i * 86400e3), x = D.days.find((d) => d.day === day); const u = x ? x.u : {};
-    days.push({ day, n: Object.keys(u).length, opens: Object.values(u).reduce((a, b) => a + (Number(b) || 0), 0) }); }
-  const max = Math.max(4, ...days.map((d) => d.n)), W = 600, H = 150, bw = W / 30;
-  const nice = max <= 4 ? 4 : Math.ceil(max / 4) * 4;
-  const bars = days.map((d, i) => { const h = d.n ? Math.max(3, (d.n / nice) * (H - 20)) : 0, x = i * bw + 2, y = H - h;
-    const lab = `${Number(d.day.slice(5, 7))}/${Number(d.day.slice(8))} · ${d.n}명 · ${d.opens}번`;
-    return `<g class="bar" tabindex="0" aria-label="${lab}"><rect class="hit" x="${i * bw}" y="0" width="${bw}" height="${H}"/>${h ? `<path d="M${x},${H} V${y + 3} q0,-3 3,-3 h${(bw - 10).toFixed(1)} q3,0 3,3 V${H} Z"/>` : ""}<title>${lab}</title></g>`; }).join("");
-  const grid = [0, .5, 1].map((f) => `<line x1="0" x2="${W}" y1="${H - f * (H - 20)}" y2="${H - f * (H - 20)}"/><text x="${W + 6}" y="${H - f * (H - 20) + 4}">${Math.round(nice * f)}</text>`).join("");
-  const ticks = [0, 7, 14, 21, 29].map((i) => `<text x="${i * bw + bw / 2}" y="${H + 16}" text-anchor="middle">${Number(days[i].day.slice(5, 7))}/${Number(days[i].day.slice(8))}</text>`).join("");
+  const X = usStats(D), { U, days, today, w7, reg, rows, dayList, byDay, people } = X;
+  const curVer = VERSION, Pl = Object.values(people);
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const todayN = byDay[today] ? byDay[today].users.size : 0;
+  const w7N = new Set(dayList.filter((d) => d >= w7).flatMap((d) => [...byDay[d].users])).size;
+  const minRows = rows.filter((x) => x.mins !== undefined);
+  const avgMin = minRows.length ? minRows.reduce((n, x) => n + (x.mins || 0), 0) / minRows.length : 0;
+  const latest = Pl.map((p) => p.L).filter(Boolean), withVer = latest.filter((l) => l.ver);
+  const pwaN = withVer.filter((l) => l.pwa).length, verN = withVer.filter((l) => l.ver === curVer).length;
+  const errs = {}; rows.forEach((x) => Object.entries(x.errs || {}).forEach(([k, v]) => {
+    const e = errs[k] = errs[k] || { n: 0, users: new Set(), last: "", vers: new Set() };
+    e.n += v; e.users.add(x.uid); if (x.date > e.last) e.last = x.date; if (x.ver) e.vers.add(x.ver); }));
+  const errN = Object.values(errs).reduce((n, e) => n + e.n, 0);
+  const loadSum = rows.reduce((n, x) => n + (x.loadSum || 0), 0), loadN = rows.reduce((n, x) => n + (x.loadN || 0), 0);
+  const memAvg = reg.length ? reg.reduce((n, r) => n + ((D.statBy[r.email] || {}).mem || 0), 0) / reg.length : 0;
+  const devs = D.subs.reduce((a, x) => a + Object.keys(x.devices || {}).length, 0), subsN = D.subs.filter((x) => Object.keys(x.devices || {}).length && X.regE.has(x.email)).length;
+  const firstUse = rows.reduce((m, x) => !m || x.date < m ? x.date : m, "");
+  const T = (k, v, sub, tone) => `<div class="tile${tone ? " " + tone : ""}"><small>${k}</small><b>${v}</b><span>${sub}</span></div>`;
+
+  // 날마다
+  const metric = U.metric, mUnit = metric === "users" ? "명" : metric === "mins" ? "분" : "번";
+  const val = (d) => metric === "users" ? byDay[d].users.size : metric === "mins" ? byDay[d].mins : byDay[d].opens;
+  const peak = Math.max(1, ...dayList.map(val)), W = 1000, H = 170, bw = W / dayList.length, step = days <= 7 ? 1 : days <= 30 ? 7 : 15;
+  const chart = `<svg class="us-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="날마다 ${mUnit}">
+      ${[0.5, 1].map((f) => `<line x1="0" x2="${W}" y1="${H - 5 - f * 150}" y2="${H - 5 - f * 150}" class="gl"/>`).join("")}
+      ${dayList.map((d, i) => { const v = val(d), h = v ? Math.max(v / peak * 150, 3) : 0, wk = new Date(d + "T00:00Z").getUTCDay();
+        return `<rect x="${(i * bw + bw * 0.14).toFixed(1)}" y="${(H - 5 - h).toFixed(1)}" width="${(bw * 0.72).toFixed(1)}" height="${h.toFixed(1)}" class="${wk === 0 ? "sun" : ""}${d === today ? " now" : ""}"><title>${fmtDay(d)} · ${nf(v)}${mUnit}</title></rect>`; }).join("")}
+    </svg>
+    <div class="us-x">${dayList.map((d, i) => (dayList.length - 1 - i) % step === 0 ? `<span style="left:${((i + 0.5) * bw / 10).toFixed(2)}%">${fmtDay(d)}</span>` : "").join("")}</div>`;
+
+  // 요일 × 시간 (사용 분)
+  const HM = Array.from({ length: 7 }, () => Array(24).fill(0));
+  rows.forEach((x) => { const wd = (new Date(x.date + "T00:00Z").getUTCDay() + 6) % 7; Object.entries(x.hours || {}).forEach(([h, v]) => { if (HM[wd][+h] !== undefined) HM[wd][+h] += v; }); });
+  const hmPeak = Math.max(1, ...HM.flat()), WD = ["월", "화", "수", "목", "금", "토", "일"];
+  let best = [0, 0, 0]; HM.forEach((r, i) => r.forEach((v, h) => { if (v > best[0]) best = [v, i, h]; }));
+  const heat = `<div class="hm"><span></span>${Array.from({ length: 24 }, (_, h) => `<span class="hx">${h % 6 === 0 ? h : ""}</span>`).join("")}
+    ${HM.map((r, i) => `<span class="hy">${WD[i]}</span>${r.map((v, h) => `<i class="${v ? "" : "z"}" style="--a:${v ? (0.16 + 0.84 * v / hmPeak).toFixed(2) : 1}" title="${WD[i]}요일 ${h}시 · ${nf(v)}분"></i>`).join("")}`).join("")}</div>
+    <p class="us-note">${best[0] ? `가장 많이 쓰는 때 — <b>${WD[best[1]]}요일 ${best[2]}시</b> 무렵 · 진할수록 많이 씀 (한국 시간)` : "시간대 기록은 2.4 버전부터 쌓여요."}</p>`;
+
+  // 막대 목록 · 띠 그래프
+  const HB = (m, nameOf, max = 12, skip = SCREEN_SKIP) => { const L = Object.entries(m).filter(([k]) => !skip.has(k)).sort((a, b) => b[1] - a[1]).slice(0, max), top = L.length ? L[0][1] : 1;
+    return L.length ? `<div class="us-hb">${L.map(([k, v]) => `<div class="hb"><span class="who" title="${esc(nameOf(k))}">${esc(nameOf(k))}</span>
+      <span class="track"><i style="width:${Math.max(2, Math.round(v / top * 100))}%"></i></span><span class="n">${nf(v)}</span></div>`).join("")}</div>` : `<p class="muted us-empty">아직 쌓인 게 없어요.</p>`; };
+  const cnt = (f) => latest.reduce((o, l) => { const k = f(l); if (k) o[k] = (o[k] || 0) + 1; return o; }, {});
+  const PB = (m, hl) => { const L = Object.entries(m).sort((a, b) => hl ? String(b[0]).localeCompare(String(a[0]), undefined, { numeric: true }) : b[1] - a[1]), t = L.reduce((n, x) => n + x[1], 0) || 1;
+    return L.length ? `<div class="us-stack">${L.map(([k, v], i) => `<i style="width:${(v / t * 100).toFixed(2)}%;--o:${Math.max(0.28, 1 - i * 0.2).toFixed(2)}" class="${hl && k === hl ? "hl" : ""}" title="${esc(k)} ${v}명"></i>`).join("")}</div>
+      <div class="us-leg">${L.map(([k, v], i) => `<span class="${hl && k === hl ? "hl" : ""}"><i style="--o:${Math.max(0.28, 1 - i * 0.2).toFixed(2)}"></i>${esc(k)} <b>${v}</b></span>`).join("")}</div>` : `<p class="muted us-empty">—</p>`; };
+  const scr = rows.reduce((o, x) => addObj(o, x.screens), {}), act = rows.reduce((o, x) => addObj(o, x.acts), {}), stg = rows.reduce((o, x) => addObj(o, x.stg), {});
+  const stgName = (k) => { const [v, n] = k.split("_"); return `${v}권 ${n}단계`; };
+
+  // 개선 힌트
+  const usersOf = (k) => Pl.filter((p) => p.screens[k]).length;
+  const scrKeys = Object.keys(SCREEN_NAME).filter((k) => !SCREEN_SKIP.has(k));
+  const unused = rows.length ? scrKeys.filter((k) => !scr[k]) : [];
+  const rare = scrKeys.filter((k) => scr[k] && Pl.length >= 3 && usersOf(k) <= Math.max(1, Math.floor(Pl.length * 0.2)));
+  const noUse = reg.filter((r) => !Pl.some((p) => p.email === r.email));
+  const never = reg.filter((r) => !D.statBy[r.email]);
+  const nm = (r) => `<span class="nm">${esc(r.name || r.email)}${r.group ? `<small>${esc(r.group)}</small>` : ""}</span>`;
+
   // 분류별
-  const gs = admGroups(D), gRows = [...gs, ""].map((g) => { const ppl = D.rows.filter((r) => g === "" ? !r.group : r.group === g); if (!ppl.length) return "";
-    const ss = ppl.map((r) => D.statBy[r.email]).filter(Boolean), a7 = ss.filter(within(7)).length, mem = ss.reduce((a, s) => a + (s.mem || 0), 0);
-    return `<tr><th>${esc(g || "분류 없음")}</th><td>${ppl.length}</td><td>${a7}<small> (${Math.round(a7 / ppl.length * 100)}%)</small></td><td>${ss.length ? (mem / ppl.length).toFixed(1) : "0"}</td></tr>`; }).join("");
+  const gRows = [...admGroups(D), ""].map((g) => { const ppl = D.rows.filter((r) => g === "" ? !r.group : r.group === g); if (!ppl.length) return "";
+    const pp = ppl.map((r) => Pl.find((p) => p.email === r.email)).filter(Boolean), a7 = ppl.filter((r) => { const p = Pl.find((q) => q.email === r.email); return p && p.last >= w7; }).length;
+    const mins = pp.reduce((n, p) => n + p.mins, 0), mem = ppl.reduce((n, r) => n + ((D.statBy[r.email] || {}).mem || 0), 0);
+    return `<tr><th>${esc(g || "분류 없음")}</th><td>${ppl.length}</td><td>${pp.length}<small> (${pct(pp.length, ppl.length)}%)</small></td><td>${a7}</td><td>${minTxt(pp.length ? mins / pp.length : 0)}</td><td>${(mem / ppl.length).toFixed(1)}</td></tr>`; }).join("");
+
   // 사람별
-  const ppl = D.rows.map((r) => ({ r, s: D.statBy[r.email] || null })).sort((a, b) => tsMs(b.s && b.s.lastAt) - tsMs(a.s && a.s.lastAt));
-  const never = ppl.filter((x) => !x.s), sleep = ppl.filter((x) => x.s && now - tsMs(x.s.lastAt) >= 30 * 86400e3);
-  const nm = (x) => `<span class="nm">${esc(x.r.name || x.r.email)}${x.r.group ? `<small>${esc(x.r.group)}</small>` : ""}</span>`;
-  return `<div class="tiles">
-      <div class="tile"><small>등록한 사람</small><b>${D.rows.length}</b><span>명</span></div>
-      <div class="tile"><small>오늘 들어온 사람</small><b>${tSet.size}</b><span>명</span></div>
-      <div class="tile"><small>최근 7일</small><b>${w7}</b><span>명 · ${D.rows.length ? Math.round(w7 / D.rows.length * 100) : 0}%</span></div>
-      <div class="tile"><small>최근 30일</small><b>${w30}</b><span>명</span></div>
-      <div class="tile"><small>알림 받는 사람</small><b>${subsN}</b><span>명 · 기기 ${devs}대</span></div>
+  const list = reg.map((r) => ({ r, p: Pl.find((x) => x.email === r.email) || null, s: D.statBy[r.email] || null }));
+  const lastMs = (x) => tsMs(x.s && x.s.lastAt) || (x.p && x.p.last ? Date.parse(x.p.last + "T00:00Z") : 0);
+  const sorter = { quiet: (a, b) => lastMs(a) - lastMs(b), most: (a, b) => ((b.p && b.p.mins) || 0) - ((a.p && a.p.mins) || 0) || lastMs(b) - lastMs(a),
+    mem: (a, b) => ((b.s && b.s.mem) || 0) - ((a.s && a.s.mem) || 0), name: (a, b) => (a.r.name || a.r.email).localeCompare(b.r.name || b.r.email, "ko") }[U.sort];
+  const topScr = (p) => Object.entries(p.screens).filter(([k]) => !["lib", "book", "admin"].includes(k)).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => SCREEN_NAME[k] || k).join(" · ");
+  const ppl = list.sort(sorter).map((x) => { const L = (x.p && x.p.L) || {}, q = lastMs(x) ? Math.floor((Date.now() - lastMs(x)) / 86400e3) : null;
+    return `<tr class="${q === null || q >= 14 ? "warn" : ""}"><td>${nm(x.r)}</td>
+      <td><span class="chip ${q === null || q >= 14 ? "warn" : q <= 1 ? "ok" : ""}">${q === null ? "아직" : x.s && x.s.lastAt ? ago(x.s.lastAt) : daysAgo(x.p.last) === 0 ? "오늘" : daysAgo(x.p.last) + "일 전"}</span></td>
+      <td class="n">${x.p ? x.p.days.size : 0}<small>/${days}일</small></td><td class="n">${x.p && x.p.L ? minTxt(x.p.mins) : "-"}</td><td class="n">${x.p && x.p.L ? nf(x.p.acts) : "-"}</td>
+      <td class="n">${x.s ? x.s.mem || 0 : "-"}</td><td class="t">${esc((x.p && topScr(x.p)) || (x.s && x.s.lastRef) || "—")}</td>
+      <td class="t">${esc(L.device || "")}${L.pwa ? ` <span class="tag">앱</span>` : ""}${L.ver ? ` <span class="tag ${L.ver === curVer ? "" : "old"}">${esc(L.ver)}</span>` : ""}</td></tr>`; }).join("");
+  const EL = Object.entries(errs).sort((a, b) => b[1].n - a[1].n).slice(0, 20);
+  const grpChips = [["*", "모두", D.rows.length], ...admGroups(D).map((g) => [g, g, D.rows.filter((r) => r.group === g).length]).filter((x) => x[2])];
+
+  return `<div class="us-bar">
+      <div class="seg" role="group" aria-label="기간">${US_PERIOD.map(([d, l]) => `<button type="button" data-adm="usd" data-v="${d}" aria-pressed="${d === days}">${l}</button>`).join("")}</div>
+      <span class="sp"></span>
+      <button class="btn ghost small" type="button" data-adm="usreload">${icon("refresh")}새로 읽기</button>
+      <button class="btn ghost small" type="button" data-adm="uscsv">CSV 내려받기</button>
     </div>
-    <div class="sec-h">날짜별 들어온 사람 · 최근 30일</div>
-    <figure class="chart"><svg viewBox="0 0 ${W + 28} ${H + 22}" role="img" aria-label="최근 30일 날짜별 들어온 사람 수"><g class="grid">${grid}</g><g class="bars">${bars}</g><g class="ticks">${ticks}</g></svg>
-      <figcaption class="muted">막대에 손가락이나 마우스를 올리면 그날 들어온 사람 수와 들어온 횟수가 보여요. (같은 사람이 20분 안에 다시 열면 한 번으로 셈)</figcaption></figure>
-    <details class="daytable"><summary>날짜별 숫자로 보기</summary><table class="st-t"><thead><tr><th>날짜</th><th>사람</th><th>횟수</th></tr></thead><tbody>${days.slice().reverse().map((d) => `<tr><td>${d.day}</td><td>${d.n}</td><td>${d.opens}</td></tr>`).join("")}</tbody></table></details>
-    <div class="sec-h">분류별</div>
-    <table class="st-t"><thead><tr><th>분류</th><th>등록</th><th>7일 안에 들어옴</th><th>한 사람 평균 외운 본문</th></tr></thead><tbody>${gRows}</tbody></table>
-    <div class="sec-h">사람별 · 최근 접속순</div>
-    <div class="st-wrap"><table class="st-t st-p"><thead><tr><th>이름</th><th>마지막 접속</th><th>들어온 날</th><th>본 본문</th><th>외운 본문</th><th>마지막 본 본문</th></tr></thead><tbody>
-      ${ppl.map((x) => `<tr><td>${nm(x)}</td><td>${x.s ? ago(x.s.lastAt) : '<small class="never">아직</small>'}</td><td>${x.s ? (x.s.days || 1) + "일" : "-"}</td><td>${x.s ? x.s.views || 0 : "-"}</td><td>${x.s ? x.s.mem || 0 : "-"}</td><td class="ref">${x.s && x.s.lastRef ? esc(x.s.lastRef) : ""}</td></tr>`).join("")}</tbody></table></div>
-    <div class="sec-h">한 번도 안 들어온 사람 · ${never.length}명</div>
-    <div class="nm-list">${never.map(nm).join("") || '<span class="muted">없어요</span>'}</div>
-    <div class="sec-h">30일 넘게 안 들어온 사람 · ${sleep.length}명</div>
-    <div class="nm-list">${sleep.map(nm).join("") || '<span class="muted">없어요</span>'}</div>
-    <p class="muted st-note">통계는 2.0 버전부터 모여요. 그 전에 들어왔던 사람은 다음에 들어올 때부터 보여요.</p>`;
+    <div class="grp-chips" role="group" aria-label="분류로 보기">${grpChips.map(([v, l, c]) => `<button class="chip" type="button" data-adm="usg" data-v="${esc(v)}" aria-pressed="${U.grp === v}">${esc(l)} <small>${c}</small></button>`).join("")}</div>
+    ${U.err ? `<div class="ok-box warn"><b>사용 현황을 읽지 못했어요</b>보안 규칙에 2.4의 'amsong_usage' 칸이 들어갔는지 확인해 주세요. (그 전 접속 기록만 보여요)</div>` : ""}
+    ${!firstUse || firstUse > X.from ? `<p class="us-note">사용 시간 · 시간대 · 화면 · 한 일 · 기기 · 버전 · 오류는 <b>2.4 버전부터</b> 쌓여요${firstUse ? ` (${fmtDay(firstUse)}부터 있음)` : ""}. 사람 수 · 연 횟수는 그 전 접속 기록도 함께 셉니다.</p>` : ""}
+    <div class="tiles us-tiles">
+      ${T("쓰는 사람", `${Pl.length}<small>/${reg.length}</small>`, `${days}일 동안 한 번이라도 · ${pct(Pl.length, reg.length)}%`)}
+      ${T("오늘 · 최근 7일", `${todayN}<small> · ${w7N}</small>`, "명")}
+      ${T("하루 평균 사용", minTxt(avgMin), "쓴 날 한 사람 기준")}
+      ${T("외운 본문", memAvg.toFixed(1), "한 사람 평균")}
+      ${T("홈 화면 앱", `${pct(pwaN, withVer.length)}%`, `${pwaN}/${withVer.length}명이 앱으로`, withVer.length && pct(pwaN, withVer.length) < 50 ? "warn" : "")}
+      ${T("최신 버전", `${pct(verN, withVer.length)}%`, `${curVer} 쓰는 사람 ${verN}/${withVer.length}`, verN < withVer.length ? "warn" : "")}
+      ${T("아침 알림", `${subsN}`, `명 · 기기 ${devs}대`)}
+      ${T("오류", nf(errN), errN ? `${Object.keys(errs).length}가지 · 아래 목록` : "문제 없어요", errN ? "bad" : "")}
+    </div>
+    <div class="us-grid">
+      <section class="us-card us-wide"><div class="us-h"><h3>날마다</h3>
+          <div class="seg mini" role="group" aria-label="무엇을 볼까">${[["users", "사람 수"], ["mins", "사용 시간"], ["opens", "연 횟수"]].map(([k, l]) => `<button type="button" data-adm="usm" data-v="${k}" aria-pressed="${k === metric}">${l}</button>`).join("")}</div>
+          <span class="muted">최대 ${nf(peak)}${mUnit} · 진한 막대 = 주일</span></div>
+        <div class="us-chart">${chart}</div></section>
+      <section class="us-card"><div class="us-h"><h3>언제 쓰나</h3><span class="muted">요일 × 시간 (사용 분)</span></div>${heat}</section>
+      <section class="us-card"><div class="us-h"><h3>기기 · 환경</h3><span class="muted">사람마다 마지막 기록</span></div>
+        <p class="us-lab">기기</p>${PB(cnt((l) => l.device))}
+        <p class="us-lab">운영체제</p>${PB(cnt((l) => l.os))}
+        <p class="us-lab">브라우저</p>${PB(cnt((l) => l.br))}
+        <p class="us-lab">앱 버전</p>${PB(cnt((l) => l.ver), curVer)}
+        <p class="us-note">${loadN ? `앱 여는 데 평균 <b>${(loadSum / loadN / 1000).toFixed(1)}초</b> (${nf(loadN)}번 잼)` : "여는 속도는 2.4 버전부터 재요."}${latest.some((l) => /안$/.test(l.br || "")) ? " · 카카오톡 · 네이버 앱 안에서 연 사람이 있어요 — 구글 로그인이 막힐 수 있어요." : ""}</p></section>
+      <section class="us-card"><div class="us-h"><h3>많이 쓰는 화면</h3><span class="muted">연 횟수</span></div>${HB(scr, (k) => SCREEN_NAME[k] || k)}</section>
+      <section class="us-card"><div class="us-h"><h3>한 일</h3><span class="muted">누른 횟수</span></div>${HB(act, actName)}</section>
+      <section class="us-card us-wide"><div class="us-h"><h3>많이 펼친 단계</h3><span class="muted">본문을 연 횟수</span></div>${HB(stg, stgName, 16, new Set())}</section>
+      <section class="us-card us-wide"><div class="us-h"><h3>개선 힌트</h3><span class="muted">${days}일 기준</span></div>
+        <div class="us-hints">
+          <div><p class="us-lab">아무도 안 연 화면</p><div class="nm-list">${unused.map((k) => `<span class="nm">${esc(SCREEN_NAME[k])}</span>`).join("") || `<span class="muted">${rows.length ? "없어요 — 모든 화면이 쓰였어요" : "2.4 기록이 쌓이면 보여요"}</span>`}</div>
+            <p class="us-note">모르는 기능일 수 있어요 → 모임 때 소개하거나, 정말 필요 없으면 줄일 후보.</p></div>
+          <div><p class="us-lab">몇 사람만 쓰는 화면</p><div class="nm-list">${rare.map((k) => `<span class="nm">${esc(SCREEN_NAME[k])} <small>${usersOf(k)}명</small></span>`).join("") || `<span class="muted">없어요</span>`}</div>
+            <p class="us-note">쓰는 사람에게 어떻게 쓰는지 물어보면 다음 개선 아이디어가 나와요.</p></div>
+          <div><p class="us-lab">등록은 했는데 ${days}일 동안 안 들어온 사람 · ${noUse.length}명</p><div class="nm-list">${noUse.map(nm).join("") || `<span class="muted">없어요 — 모두 들어왔어요</span>`}</div>
+            ${never.length ? `<p class="us-note">그중 한 번도 안 들어온 사람 <b>${never.length}명</b> — 앱 주소와 로그인 방법을 다시 알려 주세요.</p>` : ""}</div>
+        </div></section>
+      <section class="us-card us-wide"><div class="us-h"><h3>분류별</h3></div>
+        <div class="st-wrap"><table class="st-t"><thead><tr><th>분류</th><th>등록</th><th>${days}일 안에 씀</th><th>최근 7일</th><th>한 사람 사용 시간</th><th>평균 외운 본문</th></tr></thead><tbody>${gRows}</tbody></table></div></section>
+      <section class="us-card us-wide"><div class="us-h"><h3>사람별</h3>
+          <select id="usSort" aria-label="사람별 정렬">${[["quiet", "오래 안 들어온 순"], ["most", "많이 쓰는 순"], ["mem", "많이 외운 순"], ["name", "가나다순"]].map(([k, l]) => `<option value="${k}" ${U.sort === k ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div class="st-wrap"><table class="st-t us-tbl"><thead><tr><th>이름</th><th>마지막</th><th class="n">쓴 날</th><th class="n">사용 시간</th><th class="n">한 일</th><th class="n">외운 본문</th><th>주로 쓰는 화면</th><th>기기 · 버전</th></tr></thead>
+          <tbody>${ppl || `<tr><td colspan="8" class="muted">등록한 사람이 없어요.</td></tr>`}</tbody></table></div></section>
+      <section class="us-card us-wide"><div class="us-h"><h3>오류</h3><span class="muted">어느 화면에서 · 몇 번 · 몇 사람</span></div>
+        ${EL.length ? `<div class="st-wrap"><table class="st-t us-tbl"><thead><tr><th>화면</th><th>오류</th><th class="n">횟수</th><th class="n">사람</th><th>마지막</th><th>버전</th></tr></thead><tbody>
+          ${EL.map(([k, e]) => { const [w, ...m] = k.split(" | "); return `<tr><td>${esc(SCREEN_NAME[w] || w)}</td><td class="t mono">${esc(m.join(" | "))}</td><td class="n">${nf(e.n)}</td><td class="n">${e.users.size}</td><td>${fmtDay(e.last)}</td><td class="t">${esc([...e.vers].join(", "))}</td></tr>`; }).join("")}
+          </tbody></table></div>` : `<p class="muted us-empty">${days}일 동안 기록된 오류가 없어요.</p>`}</section>
+    </div>
+    <div class="us-priv">${icon("lock")}<div><b>무엇을 모으나</b><p>화면 이름 · 누른 기능의 횟수 · 사용 분 · 시간대 · 기기 종류 · 브라우저 · 앱 버전 · 오류 종류 · 펼친 단계.
+      <b>본문에 남긴 형광펜 · 메모 글, 녹음, 위치는 모으지 않아요.</b> 이 화면은 관리자만 봅니다.</p></div></div>`;
+}
+function usCsv(D) {
+  const U = ADM.us, X = usStats(D), q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const nameOf = (email) => { const r = D.rows.find((x) => x.email === email); return r ? r.name || email : email; };
+  const head = ["날짜", "이름", "메일", "분류", "연 횟수", "사용 분", "화면 연 횟수", "한 일", "오류", "기기", "운영체제", "브라우저", "홈 화면 앱", "버전"];
+  const lines = X.rows.slice().sort((a, b) => a.date.localeCompare(b.date) || nameOf(a.email).localeCompare(nameOf(b.email), "ko"))
+    .map((x) => [x.date, nameOf(x.email), x.email, X.grpOf(x.email), x.opens || 0, x.mins || 0, sumObj(x.screens), sumObj(x.acts), sumObj(x.errs), x.device || "", x.os || "", x.br || "", x.pwa ? "예" : "아니오", x.ver || ""].map(q).join(","));
+  const blob = new Blob(["﻿" + [head.map(q).join(","), ...lines].join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `말씀선포_사용현황_${U.days}일_${B.kstDay()}.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
 // ── 아침 알림
@@ -2090,6 +2327,8 @@ function admWire(D) {
   const $ = (id) => document.getElementById(id);
   const q = $("admQ");
   if (q) q.addEventListener("input", () => { ADM.q = q.value; $("ppList").innerHTML = admPeopleList(D); });
+  const us = $("usSort");
+  if (us) us.addEventListener("change", () => { ADM.us.sort = us.value; viewAdmin(); });
   const so = $("admSort");
   if (so) so.addEventListener("change", () => { ADM.sort = so.value; $("ppList").innerHTML = admPeopleList(D); });
   const all = $("selAll");
@@ -2170,7 +2409,12 @@ async function admClick(t) {
   const D = ADM.data; if (!D) return;
   const act = t.dataset.adm, row = t.closest("[data-email]"), email = row && row.dataset.email;
   switch (act) {
-    case "reload": await admLoad(true); ADM.alarms = null; viewAdmin(); toast("새로 불러왔어요"); break;
+    case "reload": await admLoad(true); ADM.alarms = null; if (ADM.tab === "stats") await admUsage(true); viewAdmin(); toast("새로 불러왔어요"); break;
+    case "usd": ADM.us.days = Number(t.dataset.v) || 30; viewAdmin(); break;
+    case "usg": ADM.us.grp = t.dataset.v; viewAdmin(); break;
+    case "usm": ADM.us.metric = t.dataset.v; viewAdmin(); break;
+    case "usreload": await admLoad(true); await admUsage(true); viewAdmin(); toast("새로 읽었어요"); break;
+    case "uscsv": usCsv(D); break;
     case "panel": ADM.panel = t.dataset.v || null; viewAdmin(); break;
     case "grp": ADM.grp = t.dataset.v; viewAdmin(); break;
     case "ppopen": ADM.open = ADM.open === email ? null : email; viewAdmin(); break;
@@ -2248,6 +2492,7 @@ document.addEventListener("click", async (e) => {
   if (nav && !e.metaKey && !e.ctrlKey) { e.preventDefault(); location.replace(nav.getAttribute("href")); return; }
   const t = e.target.closest("[data-act],[data-adm],[data-pin],[data-hide],[data-say],[data-pref],[data-tok],[data-line],[data-libvol],[data-tool],[data-memo]");
   if (!t) return;
+  try { usgClick(t); } catch (err) {}
   if (t.dataset.pin) {
     if (/^#\/b\//.test(location.hash)) { LIB.pinSel = Number(t.dataset.pin); render(); }
     else location.replace("#/t/pins/" + t.dataset.pin);
@@ -2417,7 +2662,7 @@ document.addEventListener("touchend", (e) => {
   if (/^b\//.test(h) && !spreadMode()) { libTurn(() => { LIB.pg += dir; setPref("libPg", String(LIB.pg)); }); return; }
   if (S.ctx.book) { bkFlip(dir); return; }
   const n = dir > 0 ? S.ctx.nb.next : S.ctx.nb.prev;
-  if (n) location.replace(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`);
+  if (n) { uBump("act", "swipe"); location.replace(`#/p/${n.vol}/${n.num}/${n.no}?m=${S.ctx.mode}`); }
 }, { passive: true });
 document.addEventListener("touchcancel", () => { SW.x = null; SW.axis = null; swHide(); }, { passive: true });
 
@@ -2470,6 +2715,7 @@ async function render() {
     else if (r === "settings") await viewSettings();
     else if (r === "admin") await viewAdmin(q);
     else go("#/");
+    if (my === rendering) usgScreen(parts, q);
   } catch (err) {
     if (my !== rendering) return;
     console.error(err);

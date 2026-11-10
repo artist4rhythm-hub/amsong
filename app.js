@@ -2,7 +2,8 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.0";
+const VERSION = "2.4.1";
+const VERSION_DATE = "2026.11.10";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -793,6 +794,7 @@ async function viewLibrary() {
       <div class="shelf-row n${vols.length}">${books}</div>
       <p class="shelf-hint">책을 누르면 단계와 진도가 펼쳐져요</p>
       ${cont}
+      <a class="shelf-ver" href="#/settings" aria-label="지금 버전 ${VERSION} · 설정 열기"><span>말씀선포</span><b>버전 ${VERSION}</b><span>${VERSION_DATE}</span></a>
     </main></div>`;
 }
 

@@ -1371,3 +1371,10 @@ html.sky-quiet #sky .sh { opacity: 0; }
 .us-priv .i { width: 18px; height: 18px; flex: none; margin-top: 2px; color: var(--acc); }
 .us-priv p { margin: 2px 0 0; }
 .us-priv b { color: var(--ink); }
+
+/* 2.4.1 — 서재(첫 화면) 맨 아래 지금 버전 */
+.shelf-ver { align-self: center; display: inline-flex; align-items: center; gap: 8px; margin: 18px auto 0; padding: 6px 14px; border-radius: 16px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surf) 70%, transparent); color: var(--sub); font-size: 12px; text-decoration: none; font-variant-numeric: tabular-nums; }
+.shelf-ver b { color: var(--pri); font-weight: 700; font-size: 12.5px; }
+.shelf-ver span + b::before, .shelf-ver b + span::before { content: none; }
+.shelf-ver:hover { border-color: var(--acc); }
+[data-theme="dark"] .shelf-ver b, [data-theme="night"] .shelf-ver b { color: var(--ink); }

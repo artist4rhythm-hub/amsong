@@ -2,8 +2,8 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.1";
-const VERSION_DATE = "2026.11.10";
+const VERSION = "2.4.2";
+const VERSION_DATE = "2026.11.17";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -382,15 +382,11 @@ const openBook = (top, left, right, tabs = "", folioL = "", folioR = "", cls = "
 
 // ───────── 화면: 로그인 · 대기
 function viewLogin() {
-  $app.innerHTML = `<main class="gate cover-gate">
-    <div class="fan" role="img" aria-label="말씀암송 선포구절 제1권 · 제2권 · 제3권 책자 표지">
-      <span class="fan-b fan-1">${coverSvg("1")}</span>
-      <span class="fan-b fan-3">${coverSvg("3")}</span>
-      <span class="fan-b fan-2">${coverSvg("2")}</span>
-    </div>
+  $app.innerHTML = `<main class="gate cover-gate photo-gate">
+    <picture class="pg-bg" aria-hidden="true"><source srcset="img/start.webp" type="image/webp"><img src="img/start.jpg" alt="" decoding="async"></picture>
     <div class="gate-t">
-      <small>다니엘 아마츠</small>
-      <h1>말씀암송 선포구절</h1>
+      <small>DANIEL AMATZ</small>
+      <h1>말씀암송<br>선포구절</h1>
       <p>제1권 · 제2권 · 제3권 성벽기도</p>
     </div>
     <div class="actions">

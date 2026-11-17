@@ -161,6 +161,21 @@ svg.i { width: 22px; height: 22px; flex: none; }
 .cover-gate .btn.google { width: 100%; min-height: 54px; border-radius: 27px; }
 .cover-gate .btn.google svg { width: 20px; height: 20px; }
 .gate-note { font-size: 12.5px; color: var(--sub); }
+/* 2.4.2 시작 화면: 펼친 책 그림 */
+.photo-gate { position: relative; z-index: 1; max-width: none; justify-content: space-between; gap: 24px; color: #FFFFFF;
+  padding: calc(72px + env(safe-area-inset-top)) 20px calc(34px + env(safe-area-inset-bottom)); }
+.pg-bg { position: fixed; inset: 0; z-index: -1; background: #0F2A21; }
+.pg-bg img { width: 100%; height: 100%; object-fit: cover; object-position: center 78%; display: block; }
+.pg-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 32, 25, .55) 0%, rgba(10, 32, 25, 0) 38%, rgba(10, 32, 25, 0) 62%, rgba(10, 24, 19, .55) 100%); }
+.photo-gate .gate-t small { color: #D9B921; }
+.photo-gate .gate-t h1 { color: #FFFFFF; font-size: 36px; line-height: 1.25; text-shadow: 0 2px 14px rgba(0, 0, 0, .35); }
+.photo-gate .gate-t p { color: rgba(255, 255, 255, .86); }
+.photo-gate .gate-note { color: rgba(255, 255, 255, .88); text-shadow: 0 1px 6px rgba(0, 0, 0, .5); }
+.photo-gate .gate-link { color: #F2E3B3; }
+.photo-gate .btn.google { border-color: transparent; box-shadow: 0 6px 20px rgba(0, 0, 0, .3); }
+body:has(.photo-gate) #sky { display: none; }
+@media (max-height: 640px) { .photo-gate { padding-top: calc(40px + env(safe-area-inset-top)); } .photo-gate .gate-t h1 { font-size: 30px; } }
+@media (min-aspect-ratio: 4/3) { .pg-bg img { object-position: center 70%; } }
 [data-theme="dark"] .fan-b, [data-theme="night"] .fan-b { box-shadow: 3px 0 0 -1px #2A3530, 0 0 0 1px rgba(0, 0, 0, .2), 0 22px 34px -12px rgba(0, 0, 0, .85); }
 @media (max-height: 640px) { .cover-gate { gap: 20px; padding-top: 20px; padding-bottom: 20px; } .fan { width: min(260px, 70vw); padding-top: min(197px, 53vw); } }
 

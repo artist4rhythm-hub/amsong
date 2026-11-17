@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.2";
+const VERSION = "2.4.3";
 const VERSION_DATE = "2026.11.17";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -45,8 +45,8 @@ let coverSeq = 0;
 function coverSvg(vol) {
   const id = "cvsky" + (++coverSeq);
   return `<svg class="cvsvg" viewBox="0 0 559 793" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E6F0EB"/><stop offset="1" stop-color="#F2F0EB"/></linearGradient></defs>
-    <g transform="scale(3.7770 3.7762) translate(-3 -3)"><rect width="154" height="216" fill="url(#${id})"/>${ridgeOf(vol)}</g>
+    <rect width="559" height="793" fill="#E9EFEA"/>
+    <image href="img/cover${esc(vol)}.jpg" x="0" y="0" width="559" height="793" preserveAspectRatio="xMidYMax slice"/>
     <image href="icons/crest.png" x="42" y="42" width="49" height="50"/>
     <g font-family="'AmsongCover', 'MaruBuri', sans-serif" font-weight="700" fill="#1E3932" text-anchor="end">
       <text x="517" y="185" font-size="48" letter-spacing="-1.4">말씀암송</text>

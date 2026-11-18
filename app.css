@@ -1393,3 +1393,13 @@ html.sky-quiet #sky .sh { opacity: 0; }
 .shelf-ver span + b::before, .shelf-ver b + span::before { content: none; }
 .shelf-ver:hover { border-color: var(--acc); }
 [data-theme="dark"] .shelf-ver b, [data-theme="night"] .shelf-ver b { color: var(--ink); }
+
+/* 2.4.4 관리 → 음성 */
+.audio-adm { display: flex; flex-direction: column; gap: 12px; }
+.au-list { display: flex; flex-direction: column; gap: 8px; }
+.au-row { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card, transparent); }
+.au-row.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc) inset; }
+.au-name b { display: block; font-size: 14px; } .au-name small { color: var(--sub); font-size: 12px; }
+.au-row audio { width: 100%; height: 36px; }
+.audio-adm .err { color: #C0392B; }
+@media (max-width: 560px) { .au-row { grid-template-columns: 1fr auto; } .au-row audio { grid-column: 1 / -1; grid-row: 2; } }

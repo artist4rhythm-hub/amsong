@@ -2,8 +2,8 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.3";
-const VERSION_DATE = "2026.11.17";
+const VERSION = "2.4.4";
+const VERSION_DATE = "2026.11.18";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -1949,10 +1949,11 @@ async function viewAdmin(q = {}) {
   if (!ADM.data) $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/"), tome(`<p class="muted">불러오는 중…</p>`));
   const D = await admLoad();
   if (ADM.tab === "stats") await admUsage();
+  if (ADM.tab === "audio") await admAudioLoad();
   if (rid !== rendering) return;
   const tabs = [["people", `사람 <small>${D.rows.length}</small>`], ["req", `열람 요청${D.reqs.length ? ` <em class="badge">${D.reqs.length}</em>` : ""}`],
-    ["stats", "사용 현황"], ["alarm", "아침 알림"], ["content", "본문 올리기"]];
-  const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "content" ? admContent() : admPeople(D);
+    ["stats", "사용 현황"], ["alarm", "아침 알림"], ["audio", "음성"], ["content", "본문 올리기"]];
+  const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "audio" ? admAudio() : ADM.tab === "content" ? admContent() : admPeople(D);
   $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/", `<button class="iconbtn" type="button" data-adm="reload" aria-label="새로 불러오기">${icon("refresh")}</button>`), tome(`
     <nav class="adm-tabs adm-top" role="tablist" aria-label="관리 메뉴">${tabs.map(([id, lb]) =>
       `<a class="adm-tab" role="tab" href="#/admin?t=${id}" data-nav aria-selected="${ADM.tab === id}">${lb}</a>`).join("")}</nav>
@@ -2314,6 +2315,35 @@ function admAlarm(D) {
       <div class="row-btns"><button class="btn small" type="submit">키 저장</button></div></form>`;
 }
 
+// ── 음성 (2.4.4): 구글 TTS 목소리 시안 듣고 고르기 — 음성은 GitHub '말씀선포 음성 만들기'가 만들어 넣음
+const AU = { samples: null, cfg: null, log: null };
+async function admAudioLoad(force) {
+  if (AU.samples && !force) return;
+  const safe = (p, d) => p.catch(() => d);
+  [AU.samples, AU.cfg, AU.log] = await Promise.all([safe(B.listAudioSamples(), []), safe(B.getConfig("audio"), null), safe(B.getConfig("ttsLog"), null)]);
+}
+function admAudio() {
+  const list = (AU.samples || []).slice().sort((a, b) => (a.gender || "").localeCompare(b.gender || "") || (a.short || "").localeCompare(b.short || ""));
+  const chosen = AU.cfg && AU.cfg.voice, L = (AU.log && AU.log.last) || null;
+  const gk = (g) => g === "FEMALE" ? "여성" : g === "MALE" ? "남성" : "";
+  const rows = list.map((x) => `<div class="au-row${x.voice === chosen ? " on" : ""}">
+      <div class="au-name"><b>${esc(x.label || gk(x.gender) || "목소리")}</b><small>${esc(x.short || "")}${x.voice === chosen ? " · 고른 목소리" : ""}</small></div>
+      <audio controls preload="none" src="data:audio/mpeg;base64,${x.b64 || ""}"></audio>
+      <button class="btn small${x.voice === chosen ? "" : " ghost"}" type="button" data-adm="auvoice" data-v="${esc(x.voice)}" aria-pressed="${x.voice === chosen}">${x.voice === chosen ? "고름" : "이 목소리로"}</button></div>`).join("");
+  return `<div class="audio-adm">
+    <p class="muted" style="margin:0">같은 구절(${esc((list[0] && list[0].ref) || "갈라디아서 2:20")})을 목소리마다 읽었어요. 하나를 고르면 그 목소리로 1·2·3권 전체 음성을 만들어요.</p>
+    ${L ? `<p class="muted">마지막 만들기: ${ago(L.at)} · ${L.ok ? `시안 ${(L.voices || []).length}개 · 빠르기 ${L.rate}` : `<span class="err">실패 — ${esc(L.error || "")}</span>`}</p>` : ""}
+    ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요. 아래 순서대로 한 번 만들어 주세요.</p>`}
+    <div class="row-btns"><button class="btn ghost small" type="button" data-adm="aureload">${icon("refresh")}새로 읽기</button></div>
+    <details class="howto" ${rows ? "" : "open"}><summary>음성 만드는 순서</summary>
+      <ol>
+        <li>github.com/artist4rhythm-hub/amsong → Settings → Secrets and variables → Actions → <b>New repository secret</b> → 이름 <code>AMSONG_TTS_KEY</code>, 값에는 구글 클라우드 <b>amsong-tts</b> 프로젝트의 API 키 (한 번만)</li>
+        <li>저장소 → <b>Actions</b> → 왼쪽 '<b>말씀선포 음성 만들기</b>' → <b>Run workflow</b> → 1~2분 뒤 '새로 읽기'</li>
+      </ol>
+      <p class="muted">음성은 구글 무료 한도(한 달 100만 자) 안에서 만들어요. 본문과 음성은 GitHub에 남지 않고 이 앱의 Firebase에만 저장돼요.</p></details>
+  </div>`;
+}
+
 // ── 본문 올리기
 const admContent = () => `<div class="upload">
     <p class="muted" style="margin:0">제작 키트의 <b>amsong_content.json</b> 파일을 고르면 1·2·3권 본문이 올라가요. 책을 고쳐 다시 뽑았을 때도 같은 방법으로 덮어써요. (이 파일은 GitHub에 올리지 않아요)</p>
@@ -2475,6 +2505,12 @@ async function admClick(t) {
         const reg = await navigator.serviceWorker.ready;
         await reg.showNotification(a.title || "말씀선포", { body: (a.body || "").replace(/\{이름\}/g, S.user.name || ""), icon: "icons/icon-192.png", tag: "amsong-preview" });
       } catch (e) { toast("미리 보기를 띄우지 못했어요"); }
+      break;
+    }
+    case "aureload": await admAudioLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
+    case "auvoice": {
+      try { await B.setConfig("audio", { voice: t.dataset.v }); AU.cfg = { ...(AU.cfg || {}), voice: t.dataset.v }; toast("이 목소리로 정했어요"); viewAdmin(); }
+      catch (e) { toast("저장하지 못했어요"); }
       break;
     }
     case "altest": {

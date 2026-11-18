@@ -215,6 +215,12 @@ export async function listPush() {
 
 export const deleteAllow = (email) => deleteDoc(doc(db, "amsong_allow", lower(email)));
 
+// ── 말씀 음성 (2.4.4) — 목소리 시안은 관리자만, GitHub '음성 만들기'가 만들어 넣음
+export async function listAudioSamples() {
+  const s = await getDocs(collection(db, "amsong_audio_samples"));
+  return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 // ── 본문
 export async function getBook(vol) {
   const s = await cacheFirst(doc(db, "amsong_books", String(vol)));

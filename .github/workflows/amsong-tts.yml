@@ -1,0 +1,121 @@
+# 말씀선포 음성 만들기 — 구글 TTS(Chirp 3 HD)로 말씀을 읽은 음성을 만들어 Firebase(amsong-99f03)에 넣습니다.
+# 손으로 누를 때만 실행됩니다: GitHub 저장소 → Actions → '말씀선포 음성 만들기' → Run workflow
+# 필요한 비밀값
+#   AMSONG_TTS_KEY     = 구글 클라우드 'amsong-tts' 프로젝트의 API 키 (Text-to-Speech 전용)
+#   AMSONG_FIREBASE_SA = Firebase(amsong-99f03) 서비스 계정 키 (아침 알림과 같은 것)
+# 본문과 음성은 GitHub에 남기지 않고 Firebase에서 읽고 Firebase에만 저장합니다.
+name: 말씀선포 음성 만들기
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "sample = 목소리 시안 만들기 (갈라디아서 2:20)"
+        required: true
+        default: "sample"
+        type: choice
+        options: [sample]
+      rate:
+        description: "읽는 빠르기 (1.0 = 보통, 0.9 = 조금 천천히)"
+        required: true
+        default: "0.95"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: amsong-tts
+  cancel-in-progress: false
+
+jobs:
+  tts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 음성 만들기
+        env:
+          FIREBASE_SA: ${{ secrets.AMSONG_FIREBASE_SA }}
+          TTS_KEY: ${{ secrets.AMSONG_TTS_KEY }}
+          MODE: ${{ inputs.mode }}
+          RATE: ${{ inputs.rate }}
+        run: |
+          if [ -z "$FIREBASE_SA" ]; then echo "비밀값 AMSONG_FIREBASE_SA 가 없어요"; exit 1; fi
+          if [ -z "$TTS_KEY" ]; then echo "비밀값 AMSONG_TTS_KEY 가 아직 없어요 (Settings → Secrets and variables → Actions)"; exit 1; fi
+          mkdir -p run && cd run
+          npm init -y >/dev/null
+          npm i --silent --no-audit --no-fund firebase-admin@12 >/dev/null
+          cat > tts.mjs <<'JS'
+          import admin from "firebase-admin";
+          const PROJECT = "amsong-99f03";
+          const sa = JSON.parse(process.env.FIREBASE_SA);
+          if (sa.project_id !== PROJECT) { console.error("앱 전용 프로젝트(" + PROJECT + ")의 키가 아니라서 멈춰요: " + sa.project_id); process.exit(1); }
+          admin.initializeApp({ credential: admin.credential.cert(sa), projectId: PROJECT });
+          const db = admin.firestore(), FV = admin.firestore.FieldValue;
+          const KEY = process.env.TTS_KEY, MODE = process.env.MODE || "sample";
+          const RATE = Math.min(1.3, Math.max(0.7, Number(process.env.RATE) || 0.95));
+          const logRef = db.doc("amsong_config/ttsLog");
+
+          async function api(path, body) {
+            const url = "https://texttospeech.googleapis.com/v1/" + path + (path.includes("?") ? "&" : "?") + "key=" + encodeURIComponent(KEY);
+            const r = await fetch(url, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+            return j;
+          }
+          // "고린도전서 13Ⓐ:1-13" → "고린도전서 13장 1절에서 13절"
+          function sayRef(ref) {
+            const m = String(ref).replace(/Ⓐ/g, "").match(/^(.*?)\s*(\d+):(\d+)(?:-(\d+))?$/);
+            if (!m) return String(ref).replace(/Ⓐ/g, "");
+            return `${m[1]} ${m[2]}장 ${m[3]}절` + (m[4] ? `에서 ${m[4]}절` : "");
+          }
+          const verseText = (p) => p.verses.map((v) => (v.lines || []).join("\n")).join("\n\n");
+          async function speak(voice, text) {
+            const body = { input: { text }, voice: { languageCode: voice.languageCodes[0], name: voice.name }, audioConfig: { audioEncoding: "MP3", speakingRate: RATE } };
+            try { return await api("text:synthesize", body); }
+            catch (e) {
+              if (!/rate|speaking/i.test(e.message)) throw e;
+              delete body.audioConfig.speakingRate;                 // 빠르기를 못 바꾸는 목소리면 보통 빠르기로
+              return await api("text:synthesize", body);
+            }
+          }
+          const LABEL = { Sulafat: "따뜻한 여성", Gacrux: "차분한 여성", Kore: "또렷한 여성", Aoede: "밝은 여성", Leda: "젊은 여성",
+            Charon: "차분한 남성", Iapetus: "맑은 남성", Schedar: "고른 남성", Orus: "단단한 남성", Achird: "다정한 남성" };
+          const WANT = ["Sulafat", "Gacrux", "Kore", "Charon", "Iapetus", "Schedar"];
+
+          try {
+            if (MODE !== "sample") throw new Error("아직 준비 중인 방식이에요: " + MODE);
+            const { voices = [] } = await api("voices?languageCode=ko-KR");
+            const chirp = voices.filter((v) => /Chirp3-HD/.test(v.name));
+            if (!chirp.length) throw new Error("한국어 Chirp 3 HD 목소리를 찾지 못했어요");
+            const short = (v) => v.name.split("-").pop();
+            let pick = WANT.map((w) => chirp.find((v) => short(v) === w)).filter(Boolean);
+            for (const v of chirp) { if (pick.length >= 6) break; if (!pick.includes(v)) pick.push(v); }
+
+            const st = (await db.doc("amsong_books/1/stages/1").get()).data();
+            const p = st && (st.passages || []).find((x) => /^갈라디아서 2:20/.test(x.ref));
+            if (!p) throw new Error("1권 1단계에서 갈라디아서 2:20을 찾지 못했어요 (본문을 먼저 올려 주세요)");
+            const text = sayRef(p.ref) + ".\n\n" + verseText(p);
+
+            const done = [];
+            for (const v of pick) {
+              const r = await speak(v, text);
+              const s = short(v);
+              await db.doc("amsong_audio_samples/" + s).set({ voice: v.name, short: s, gender: v.ssmlGender || "", label: LABEL[s] || "",
+                ref: p.ref, rate: RATE, b64: r.audioContent, bytes: Math.round(r.audioContent.length * 0.75), at: FV.serverTimestamp() });
+              done.push(s); console.log("만듦: " + v.name + " · " + Math.round(r.audioContent.length * 0.75 / 1024) + "KB");
+            }
+            const old = await db.collection("amsong_audio_samples").get();
+            for (const d of old.docs) if (!done.includes(d.id)) await d.ref.delete();
+            await logRef.set({ last: { mode: MODE, ok: true, at: Date.now(), rate: RATE, voices: done, chars: text.length * done.length, error: "" } }, { merge: true });
+            console.log("목소리 시안 " + done.length + "개 완료 · 앱 → 관리 → 음성 에서 들어 보세요");
+          } catch (e) {
+            console.error("실패: " + e.message);
+            await logRef.set({ last: { mode: MODE, ok: false, at: Date.now(), error: String(e.message).slice(0, 300) } }, { merge: true });
+            process.exit(1);
+          }
+          JS
+          node tts.mjs

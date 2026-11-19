@@ -256,6 +256,20 @@ export async function listAudioSamples() {
   return s.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// ── 본문 음성 (2.5) — 본문마다 목록 하나 + 조각(0 = 본문 주소, 1~ = 절). 한 번 들은 조각은 기기에 남아 인터넷 없이도 다시 들림
+export async function getAudioIndex(vol, pid) {
+  const s = await getDoc(doc(db, "amsong_audio", String(vol), "passages", pid));
+  return s.exists() ? s.data() : null;
+}
+export async function getAudioPart(vol, pid, i) {
+  const s = await cacheFirst(doc(db, "amsong_audio", String(vol), "passages", pid + "_" + i));
+  return s.exists() ? s.data() : null;
+}
+export async function getAudioVol(vol) {
+  const s = await getDoc(doc(db, "amsong_audio", String(vol)));
+  return s.exists() ? s.data() : null;
+}
+
 // ── 본문
 export async function getBook(vol) {
   const s = await cacheFirst(doc(db, "amsong_books", String(vol)));

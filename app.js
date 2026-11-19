@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.5";
+const VERSION = "2.5.0";
 const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -108,7 +108,29 @@ const ICON = {
   close: '<path d="M6 6l12 12M18 6L6 18"/>',
   zoom: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5M11 8.5v5M8.5 11h5"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8M4 4v4h4M4 13a8 8 0 0 0 14.3 4.9L20 16M20 20v-4h-4"/>',
-  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'
+  lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  head: '<path d="M4 18v-5a8 8 0 0 1 16 0v5"/><path d="M20 19a2 2 0 0 1-2 2h-1v-6h3zM4 19a2 2 0 0 0 2 2h1v-6H4z"/>',
+  play: '<path d="M8 5.5v13l11-6.5z"/>', pause: '<rect x="6.5" y="5" width="4" height="14" rx="1"/><rect x="13.5" y="5" width="4" height="14" rx="1"/>',
+  prev: '<path d="M18 6l-8 6 8 6zM6 6v12"/>', skip: '<path d="M6 6l8 6-8 6zM18 6v12"/>',
+  rep1: '<path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/><path d="M11 10h1v4"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  chevd: '<path d="M6 9l6 6 6-6"/>', chevu: '<path d="M6 15l6-6 6 6"/>', chevr: '<path d="M9 6l6 6-6 6"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', dots: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20.5 20.5l-4.3-4.3"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+  logs: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+  wave: '<path d="M3 12h1M7 8v8M11 5v14M15 8v8M19 10v4"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5M12 3v12"/>',
+  usersplus: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M19 8v6M16 11h6"/>',
+  tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>',
+  dl: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/>',
+  filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  type: '<path d="M4 7V5h16v2M9 19h6M12 5v14"/>', star: '<path d="M12 3l2.6 5.5 6 .8-4.4 4.2 1.1 6L12 16.6 6.7 19.5l1.1-6L3.4 9.3l6-.8z"/>',
+  book: '<path d="M2 5h7a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H2zM22 5h-7a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h8z"/>',
+  gauge: '<path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/>', phone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>', sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'
 };
 const icon = (n, cls = "i") => `<svg class="${cls}" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 
@@ -1417,7 +1439,7 @@ function hideLine(p, weak, v, vi, li, pfx = "") {
 }
 
 function versesHide(p, weak, v) {
-  return `<div class="verses" data-fit>${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
+  return `<div class="verses" data-fit data-pid="${p.id}">${p.verses.map((vs, vi) => `<div class="verse"><span class="vn">${vs.n ?? ""}</span><div class="lines">
     ${vs.lines.map((l, li) => hideLine(p, weak, v, vi, li)).join("")}${glossHtml(vs)}</div></div>`).join("")}</div>`;
 }
 
@@ -1507,7 +1529,7 @@ async function viewPassage(vol, num, no, q) {
     ${isWide ? "" : `<a class="iconbtn" href="#/s/${vol}/${num}" aria-label="구절표로">${icon("menu")}</a>`}
     <a class="iconbtn" href="#/" aria-label="서재로">${icon("home")}</a>
     <div class="t">${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b></div>
-    ${themeBtn()}
+    ${mode === "rec" ? "" : plBtn()}${themeBtn()}
   </header>`;
   if (isWide) {
     // 넓은 화면 · 선포와 녹음 채점: 왼쪽 쪽에 제목과 조작, 오른쪽 쪽에 본문
@@ -1525,7 +1547,7 @@ async function viewPassage(vol, num, no, q) {
       right = r.verses;
     }
     const lk = (n, dir) => n ? `<a class="flip" data-nav="replace" href="#/p/${n.vol}/${n.num}/${n.no}?m=${mode}">${dir < 0 ? icon("back") : ""}<span>${refHtml(n.ref)}</span>${dir > 0 ? icon("next") : ""}</a>` : "";
-    $app.innerHTML = openBook(bkTop(vol, st), `<div class="sheet">${left}</div>`, `<div class="sheet">${right}</div>`, `<div class="bk-tools"></div>${modes}`,
+    $app.innerHTML = openBook(bkTop(vol, st, mode), `<div class="sheet">${left}</div>`, `<div class="sheet">${right}</div>`, `<div class="bk-tools"></div>${modes}`,
       lk(nb.prev, -1), lk(nb.next, 1), "duo-mode") + drawerHtml(vol, st, p.no);
   } else {
     $app.innerHTML = deskPage(top, tome(sheet + pager, modes));
@@ -1668,11 +1690,11 @@ function drawerHtml(vol, st, curNo) {
       <div class="drawer-body">${stageHead(vol, st)}${stageList(vol, st, curNo)}</div>
     </aside>`;
 }
-const bkTop = (vol, st) => `<header class="top">
+const bkTop = (vol, st, mode) => `<header class="top">
     <button class="iconbtn" type="button" data-act="drawer" aria-label="구절표 열기" aria-expanded="${!!S.drawer}">${icon("menu")}</button>
     <a class="iconbtn" href="#/" aria-label="서재로">${icon("home")}</a>
     <div class="t">${esc(VOL_SHORT[vol])} · <b>${esc(st.label)}</b></div>
-    ${themeBtn()}
+    ${mode === "rec" ? "" : plBtn()}${themeBtn()}
   </header>`;
 const hideChips = (v) => `<div class="tools" role="group" aria-label="가리는 방법">
     ${HIDES.map(([id, lb]) =>
@@ -1682,7 +1704,7 @@ const hideChips = (v) => `<div class="tools" role="group" aria-label="가리는 
 function viewBookSpread(c) {
   const { vol, num, b, st, p, mode, v, nb, modes } = c;
   const tools = mode === "read" ? penBar() : hideChips(v);
-  $app.innerHTML = openBook(bkTop(vol, st), "", "", `<div class="bk-tools">${tools}</div>${modes}`, "", "", "bk-mode") + drawerHtml(vol, st, p.no);
+  $app.innerHTML = openBook(bkTop(vol, st, mode), "", "", `<div class="bk-tools">${tools}</div>${modes}`, "", "", "bk-mode") + drawerHtml(vol, st, p.no);
   const L = $app.querySelector(".ob-l .ob-scroll"), Rp = $app.querySelector(".ob-r .ob-scroll");
   const cs = getComputedStyle(L);
   const bw = Math.floor(L.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
@@ -1743,6 +1765,235 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "Escape" && S.drawer) { S.drawer = false; render(); }
 });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { S._fontsOk = true; if (S.ctx && S.ctx.book) render(); });
+
+// ───────── 듣기 (2.5) — 본문 음성 (GitHub '말씀선포 음성 만들기'가 고른 목소리로 절마다 만든 음성)
+//  - 평소엔 닫혀 있고, 위쪽 [듣기]를 누르면 아래 듣기 막대가 열리며 지금 본문을 처음부터 읽어 줌
+//  - 지금 읽는 절에 연한 초록 띠 · 이전/다음 절 · 한 절 반복 · 듣고 따라 하기(절마다 쉬어 줌) · 단계 이어 듣기 · 빠르기
+//  - 막대를 작게 접을 수 있음(오른쪽 아래 작은 단추) · 화면을 꺼도 계속 · 잠금 화면에서 멈춤/다음
+//  - 한 번 들은 음성은 기기에 남아 인터넷 없이도 다시 들림
+const PL_RATES = [0.8, 1, 1.2];
+const PL_GAPS = [["0.6", "짧게"], ["1", "절 길이"], ["1.6", "길게"]];
+const PL = { open: false, mini: false, playing: false, state: "idle", vol: "", num: 0, pid: "", ref: "", label: "", mode: "read",
+  idx: null, i: 0, rep: false, follow: false, cont: pref("plCont", "1") === "1", rate: Number(pref("plRate", "1")) || 1,
+  urls: new Map(), audio: null, gapT: 0, token: 0, nav: false };
+const plAudio = () => {
+  if (PL.audio) return PL.audio;
+  const a = PL.audio = new Audio();
+  a.preload = "auto";
+  a.addEventListener("ended", plEnded);
+  a.addEventListener("timeupdate", plProg);
+  a.addEventListener("pause", () => { if (PL.state === "play" && !a.ended) { PL.playing = false; PL.state = "pause"; plDraw(); } });
+  a.addEventListener("play", () => { PL.playing = true; if (PL.state !== "gap") PL.state = "play"; plDraw(); });
+  return a;
+};
+const plB64 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return URL.createObjectURL(new Blob([u], { type: "audio/mpeg" })); };
+async function plUrl(vol, pid, i) {
+  const k = pid + "_" + i;
+  if (PL.urls.has(k)) return PL.urls.get(k);
+  const d = await B.getAudioPart(vol, pid, i);
+  if (!d || !d.b64) return null;
+  const u = plB64(d.b64);
+  PL.urls.set(k, u);
+  if (PL.urls.size > 80) { const [ok, ou] = PL.urls.entries().next().value; URL.revokeObjectURL(ou); PL.urls.delete(ok); }
+  return u;
+}
+const plCount = () => (PL.idx ? PL.idx.count || 0 : 0);
+const plVerseN = () => (PL.idx && PL.idx.parts && PL.idx.parts[PL.i] ? PL.idx.parts[PL.i].n : PL.i);
+
+// 본문 하나를 불러와 i번째 조각부터 (0 = 본문 주소)
+async function plLoad(c, from = 0, autoplay = true) {
+  const my = ++PL.token;
+  clearTimeout(PL.gapT);
+  plAudio().pause();
+  Object.assign(PL, { vol: String(c.vol), num: c.num, pid: c.p.id, ref: c.p.ref, label: c.st.label, mode: c.mode, idx: null, i: from, state: "load" });
+  plDraw();
+  let idx = null;
+  try { idx = await B.getAudioIndex(PL.vol, PL.pid); } catch (e) {}
+  if (my !== PL.token) return;
+  if (!idx || !idx.count) { PL.state = "none"; PL.playing = false; plDraw(); return; }
+  PL.idx = idx;
+  PL.i = Math.min(from, idx.count - 1);
+  plMeta();
+  if (autoplay) plPlay(); else { PL.state = "pause"; plDraw(); }
+}
+async function plPlay() {
+  const my = PL.token, a = plAudio();
+  clearTimeout(PL.gapT);
+  if (!PL.idx) return;
+  PL.state = "load"; plDraw();
+  let u = null;
+  try { u = await plUrl(PL.vol, PL.pid, PL.i); } catch (e) {}
+  if (my !== PL.token) return;
+  if (!u) { PL.state = "err"; PL.playing = false; plDraw(); return; }
+  if (a.src !== u) a.src = u;
+  a.playbackRate = PL.rate; a.preservesPitch = true;
+  try { await a.play(); PL.state = "play"; PL.playing = true; }
+  catch (e) { PL.state = "pause"; PL.playing = false; }
+  plDraw(); plMark();
+  // 다음 조각 미리 받아 두기
+  if (PL.i + 1 < plCount()) plUrl(PL.vol, PL.pid, PL.i + 1).catch(() => {});
+}
+function plPause() { clearTimeout(PL.gapT); plAudio().pause(); PL.playing = false; PL.state = "pause"; plDraw(); }
+function plGo(i) {
+  if (!PL.idx) return;
+  PL.i = Math.max(0, Math.min(plCount() - 1, i));
+  plPlay();
+}
+function plEnded() {
+  const a = plAudio();
+  if (PL.follow && PL.i > 0) {
+    // 듣고 따라 하기: 방금 들은 절 길이만큼 쉬어 줌
+    const gap = ((a.duration || 4) / PL.rate) * (Number(pref("plGap", "1")) || 1) * 1000 + 700;
+    PL.state = "gap"; PL.playing = true; plDraw();
+    PL.gapT = setTimeout(plNext, gap);
+    return;
+  }
+  plNext();
+}
+function plNext() {
+  if (PL.rep && PL.i > 0) return plPlay();
+  if (PL.i + 1 < plCount()) { PL.i++; return plPlay(); }
+  // 본문 끝: 단계 이어 듣기면 다음 본문으로
+  const st = S.stages[PL.vol + "_" + PL.num];
+  const list = st ? st.passages : [];
+  const k = list.findIndex((x) => x.id === PL.pid);
+  if (PL.cont && k >= 0 && k + 1 < list.length) {
+    const np = list[k + 1];
+    const c = { vol: PL.vol, num: PL.num, p: np, st, mode: PL.mode };
+    PL.nav = true;
+    location.replace(`#/p/${PL.vol}/${PL.num}/${np.no}?m=${S.ctx ? S.ctx.mode : PL.mode}`);
+    plLoad(c, 0, true);
+    return;
+  }
+  PL.i = 0; PL.playing = false; PL.state = "done"; plDraw(); plMark();
+}
+function plProg() {
+  const bar = document.querySelector("#plBar .pl-prog i");
+  if (!bar || !PL.idx) return;
+  const a = plAudio(), n = plCount();
+  const f = a.duration ? Math.min(1, a.currentTime / a.duration) : 0;
+  bar.style.width = (((PL.i + f) / n) * 100).toFixed(1) + "%";
+}
+function plMeta() {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: PL.ref.replace(/Ⓐ/g, ""), artist: "말씀암송 선포구절", album: VOL_SHORT[PL.vol] + " · " + PL.label,
+      artwork: [{ src: "icons/icon-512.png", sizes: "512x512", type: "image/png" }] });
+    const h = { play: () => plPlay(), pause: () => plPause(), previoustrack: () => plGo(PL.i - 1), nexttrack: () => plGo(PL.i + 1), stop: () => plClose() };
+    Object.entries(h).forEach(([k, f]) => { try { navigator.mediaSession.setActionHandler(k, f); } catch (e) {} });
+  } catch (e) {}
+}
+
+// 지금 읽는 절에 띠 (읽기 · 가리기 · 펼친 책). 다른 쪽에 있으면 그 쪽으로 넘김
+function plMark() {
+  document.querySelectorAll(".pl-now").forEach((x) => x.classList.remove("pl-now"));
+  if (!PL.open || !PL.idx || PL.i < 1 || !S.ctx) return;
+  const vi = PL.i - 1;
+  const ln = document.querySelector(`.verses[data-pid="${PL.pid}"] .ln[data-u^="${vi}-"]`);
+  if (ln) {
+    const vs = ln.closest(".verse");
+    vs.classList.add("pl-now");
+    const r = vs.getBoundingClientRect(), bar = document.getElementById("plBar");
+    const bottom = window.innerHeight - (bar && !PL.mini ? bar.offsetHeight + 12 : 12);
+    if (r.top < 60 || r.bottom > bottom) vs.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  const c = S.ctx;
+  if (c.book && c.BK) {
+    const k = c.BK.pages.findIndex((pg) => pg && pg.items && pg.items.some((u) => u.pid === PL.pid && u.t === "l" && u.vi === vi));
+    const sp = k >> 1;
+    if (k >= 0 && sp !== c.spread) { S.bookPos = { key: c.vol + "/" + c.num, spread: sp }; PL.nav = true; render(); }
+  }
+}
+
+const plSec = () => { const a = plAudio(); return a.duration ? Math.round(a.duration) : 0; };
+function plDraw() {
+  let bar = document.getElementById("plBar");
+  const show = PL.open && /^#\/p\//.test(location.hash) && !(S.ctx && S.ctx.mode === "rec");
+  document.documentElement.classList.toggle("pl-on", show && !PL.mini);
+  document.documentElement.classList.toggle("pl-mini", show && PL.mini);
+  document.querySelectorAll('[data-pl="toggle"]').forEach((b) => b.setAttribute("aria-pressed", String(PL.open)));
+  if (!show) { if (bar) bar.remove(); return; }
+  if (!bar) { bar = document.createElement("div"); bar.id = "plBar"; bar.setAttribute("role", "region"); bar.setAttribute("aria-label", "듣기"); document.body.appendChild(bar); }
+  const n = plCount(), vn = plVerseN(), nv = n ? n - 1 : 0;
+  const ref = refHtml(PL.ref);
+  const playBtn = `<button class="pl-play" type="button" data-pl="${PL.playing ? "pause" : "play"}" aria-label="${PL.playing ? "멈춤" : "듣기"}">${icon(PL.playing ? "pause" : "play", "i fill")}</button>`;
+  const what = PL.state === "load" ? "불러오는 중…" : PL.state === "none" ? "이 본문 음성은 아직 준비 중이에요" : PL.state === "err" ? "음성을 받지 못했어요 · 인터넷 확인"
+    : PL.state === "gap" ? `따라 해 보세요 · ${vn}절` : PL.state === "done" ? "다 들었어요" : PL.i === 0 ? "본문 주소" : `${vn}절${PL.playing ? " 듣는 중" : ""}`;
+  bar.className = "pl" + (PL.mini ? " mini" : "") + (PL.state === "gap" ? " gap" : "");
+  if (PL.mini) {
+    bar.innerHTML = `${playBtn}<span class="pl-mini-t">${PL.i > 0 ? vn + "절" : "듣기"}</span>
+      <button class="pl-ic" type="button" data-pl="expand" aria-label="듣기 막대 펼치기">${icon("chevu")}</button>`;
+    return;
+  }
+  const chip = (k, ic, label, on) => `<button class="pl-chip" type="button" data-pl="${k}" aria-pressed="${on}">${icon(ic)}<span>${label}</span></button>`;
+  bar.innerHTML = `<div class="pl-prog"><i style="width:${n ? ((PL.i / n) * 100).toFixed(1) : 0}%"></i></div>
+    <div class="pl-l1">${playBtn}
+      <div class="pl-meta"><b>${what}</b><span>${ref}${n ? ` · ${PL.i} / ${nv}` : ""}</span></div>
+      <button class="pl-ic" type="button" data-pl="prev" aria-label="앞 절" ${PL.i <= 0 || !n ? "disabled" : ""}>${icon("prev")}</button>
+      <button class="pl-ic" type="button" data-pl="next" aria-label="다음 절" ${!n || PL.i >= n - 1 ? "disabled" : ""}>${icon("skip")}</button>
+      <button class="pl-ic" type="button" data-pl="mini" aria-label="작게 접기">${icon("chevd")}</button>
+      <button class="pl-ic" type="button" data-pl="close" aria-label="듣기 닫기">${icon("close")}</button></div>
+    <div class="pl-chips">${chip("rep", "rep1", "한 절 반복", PL.rep)}${chip("follow", "mic", "따라 하기", PL.follow)}${chip("cont", "list", "이어 듣기", PL.cont)}
+      <button class="pl-chip rate" type="button" data-pl="rate" aria-label="빠르기 ${PL.rate}배">${PL.rate.toFixed(1)}×</button></div>`;
+  plProg();
+}
+function plOpen() {
+  if (!S.ctx || S.ctx.mode === "rec") return;
+  PL.open = true; PL.mini = false;
+  plDraw();
+  plLoad(S.ctx, 0, true);
+  if (S.ctx.book) render();   // 펼친 책은 막대 높이만큼 쪽을 다시 나눔
+  uBump("act", "listen");
+}
+function plClose() {
+  ++PL.token; clearTimeout(PL.gapT);
+  if (PL.audio) PL.audio.pause();
+  PL.open = false; PL.playing = false; PL.state = "idle";
+  plDraw(); plMark();
+  if (S.ctx && S.ctx.book) render();
+  if ("mediaSession" in navigator) try { navigator.mediaSession.metadata = null; } catch (e) {}
+}
+// 화면을 다시 그린 뒤: 다른 본문으로 옮겨 갔으면 그 본문으로 바꿈 · 띠 다시 칠함
+function plAfterRender() {
+  const onP = /^#\/p\//.test(location.hash);
+  if (PL.open && !onP) { plClose(); return; }
+  if (!PL.open) { plDraw(); return; }
+  const c = S.ctx;
+  if (c && c.mode === "rec") { if (PL.playing) plPause(); plDraw(); return; }
+  const vis = c ? (c.visible || [c.p.id]) : [];
+  if (c && !PL.nav && !vis.includes(PL.pid)) plLoad(c, 0, PL.playing);
+  PL.nav = false;
+  if (c) PL.mode = c.mode;
+  plDraw(); plMark();
+}
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-pl]");
+  if (t) {
+    e.preventDefault();
+    const k = t.dataset.pl;
+    if (k === "toggle") return PL.open ? plClose() : plOpen();
+    if (k === "play") { if (!PL.idx || PL.state === "none") return plLoad(S.ctx, 0, true); if (PL.state === "done") PL.i = 0; return plPlay(); }
+    if (k === "pause") return plPause();
+    if (k === "prev") return plGo(PL.i - 1);
+    if (k === "next") return plGo(PL.i + 1);
+    if (k === "close") return plClose();
+    if (k === "mini" || k === "expand") { PL.mini = k === "mini"; plDraw(); if (S.ctx && S.ctx.book) render(); return; }
+    if (k === "rep") { PL.rep = !PL.rep; if (PL.rep) PL.follow = false; }
+    if (k === "follow") { PL.follow = !PL.follow; if (PL.follow) PL.rep = false; }
+    if (k === "cont") { PL.cont = !PL.cont; setPref("plCont", PL.cont ? "1" : "0"); }
+    if (k === "rate") { PL.rate = PL_RATES[(PL_RATES.indexOf(PL.rate) + 1) % PL_RATES.length]; setPref("plRate", String(PL.rate)); if (PL.audio) PL.audio.playbackRate = PL.rate; }
+    plDraw();
+    return;
+  }
+  // 듣기가 열려 있을 때 절 번호를 누르면 그 절부터
+  const vn = PL.open && PL.idx && e.target.closest(".verses[data-pid] .vn");
+  if (vn) {
+    const box = vn.closest(".verses[data-pid]"), ln = vn.parentElement.querySelector(".ln[data-u]");
+    if (box && ln && box.dataset.pid === PL.pid) plGo(Number(ln.dataset.u.split("-")[0]) + 1);
+  }
+}, true);
+const plBtn = () => `<button class="pl-open" type="button" data-pl="toggle" aria-pressed="${PL.open}" aria-label="듣기">${icon("head")}<span>듣기</span></button>`;
 
 // ───────── 녹음 · 채점
 function recBody(p, v, m) { const r = recParts(p, v, m); return r.panel + r.verses + r.foot; }
@@ -1918,31 +2169,37 @@ async function viewSettings() {
   const theme = pref("theme", "cream"), size = sizeNow(), mode = pref("mode", "read");
   const E = envInfo(), P = S.pushCfg || {}, on = pushOnHere(), at = alarmTxt(P);
   const devs = Object.entries((S.myPush && S.myPush.devices) || {});
-  const pushField = `<div class="field" id="pushField"><b>아침 알림 받기</b>
-      ${!P.vapidKey || !at ? `<p>관리자가 알림을 준비하면 여기서 켤 수 있어요.</p>`
-      : `<p>${esc(at)} · “${esc(((P.alarms || []).find((a) => a.on !== false) || {}).title || "말씀선포")}” 알림이 이 기기로 와요.</p>
-        ${E.inApp ? `<p class="warn-t">${esc(E.browser)}에서는 알림을 받을 수 없어요. 사파리 · 크롬으로 열어 주세요.</p>`
-        : E.ios && !E.app ? `<p class="warn-t">아이폰 · 아이패드는 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요.</p><div class="opts"><a class="btn small" href="#/install">홈 화면에 설치하는 법</a></div>`
-        : !E.pushable ? `<p class="warn-t">이 브라우저는 알림을 받을 수 없어요.</p>`
-        : `<div class="opts">${on ? `<span class="on-pill">${icon("check")} 이 기기에서 받는 중</span><button class="btn ghost small" type="button" data-act="pushoff">이 기기 끄기</button>`
-          : `<button class="btn small" type="button" data-act="pushon">이 기기에서 알림 받기</button>`}</div>`}
-        ${devs.length ? `<div class="devs">${devs.map(([k, d]) => `<span class="dev">${esc(d.label || "기기")}${k === pref("pushKey", "") ? " <small>· 이 기기</small>" : ""}<button class="iconbtn" type="button" data-act="pushrm" data-v="${esc(k)}" aria-label="이 기기는 그만 받기">${icon("close")}</button></span>`).join("")}</div>` : ""}`}</div>`;
-  const opt = (name, val, cur, label) => `<button class="chip" type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${label}</button>`;
+  // 2.5 — 묶음 카드 · 한 줄 고르기 · 켜고 끄기는 스위치
+  const card = (ic, title, body, right = "") => `<section class="set-card"><div class="cb-h">${icon(ic)}<b>${title}</b>${right ? `<em>${right}</em>` : ""}</div>${body}</section>`;
+  const seg = (name, cur, list, label) => `<div class="seg" role="group" aria-label="${label}">${list.map(([val, lb]) => `<button type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${lb}</button>`).join("")}</div>`;
+  const tgb = (name, on, onVal, offVal, label) => `<button class="tgb" type="button" role="switch" aria-checked="${on}" aria-label="${label}" data-pref="${name}" data-val="${on ? offVal : onVal}"><i></i></button>`;
+  const row = (ic, label, right) => `<div class="set-row">${icon(ic)}<span>${label}</span>${right}</div>`;
+  const pushBody = !P.vapidKey || !at ? `<p class="muted">관리자가 알림을 준비하면 여기서 켤 수 있어요.</p>`
+    : `<p class="muted">${esc(at)} · “${esc(((P.alarms || []).find((a) => a.on !== false) || {}).title || "말씀선포")}” 알림이 이 기기로 와요.</p>
+      ${E.inApp ? `<p class="warn-t">${esc(E.browser)}에서는 알림을 받을 수 없어요. 사파리 · 크롬으로 열어 주세요.</p>`
+      : E.ios && !E.app ? `<p class="warn-t">아이폰 · 아이패드는 <b>홈 화면에 추가한 앱</b>에서만 알림을 받을 수 있어요.</p><div class="opts"><a class="btn small" href="#/install">홈 화면에 설치하는 법</a></div>`
+      : !E.pushable ? `<p class="warn-t">이 브라우저는 알림을 받을 수 없어요.</p>`
+      : row("phone", "이 기기에서 받기", `<button class="tgb" type="button" role="switch" aria-checked="${on}" aria-label="이 기기에서 알림 받기" data-act="${on ? "pushoff" : "pushon"}"><i></i></button>`)}
+      ${devs.length ? `<div class="devs">${devs.map(([k, d]) => `<span class="dev">${esc(d.label || "기기")}${k === pref("pushKey", "") ? " <small>· 이 기기</small>" : ""}<button class="iconbtn" type="button" data-act="pushrm" data-v="${esc(k)}" aria-label="이 기기는 그만 받기">${icon("close")}</button></span>`).join("")}</div>` : ""}`;
+  const SIZE_SHORT = { "1": "책자 그대로", "0.92": "조금 작게", "0.85": "작게", "0.78": "더 작게", "0.7": "아주 작게" };
   $app.innerHTML = deskPage(topBar("<b>설정</b>", "#/"), tome(`
     <div class="page-h"><span class="kicker">설정</span><h1>나에게 맞게</h1></div>
-    <div class="field"><b>화면 모드</b><div class="tp-list">${THEMES.map((t) => `<button class="tp-opt" type="button" data-pref="theme" data-val="${t.id}" aria-pressed="${t.id === theme}">
-        <span class="tp-sw" style="background:${t.desk}"><i style="background:${t.paper};color:${t.ink}">가</i></span>
-        <span class="tp-tx"><b>${t.label}</b><small>${t.desc}</small></span>${t.id === theme ? icon("check", "i tp-ck") : ""}</button>`).join("")}</div>
-      <p>화면 모드는 기기마다 따로 기억해요. 폰은 밤 읽기, 패드는 크림 북처럼 쓸 수 있어요. 위쪽 반달 단추로도 바로 바꿀 수 있어요.</p></div>
-    <div class="field"><b>본문 글자 크기</b><div class="opts">${SIZES.map(([val, lb]) => opt("size", val, size, lb)).join("")}</div>
-      <div class="size-demo paperink"><span class="ln">태초에 하나님이 천지를 창조하시니라</span></div>
-      <p>'책자 그대로'가 기본이고 가장 커요. 작게 할수록 한 쪽에 더 많은 줄이 들어가요. 기기마다 따로 기억해요.</p></div>
-    <div class="field"><b>별빛 배경</b><div class="opts">${opt("stars", "on", pref("stars", "on"), "켜기")}${opt("stars", "off", pref("stars", "on"), "끄기")}</div>
-      <p>책상 바탕에 별빛이 반짝이고 가끔 별똥별이 지나가요. 오래된 폰에서 느리면 꺼 주세요.</p></div>
-    ${pushField}
-    <div class="field"><b>본문을 열 때 기본 방식</b><div class="opts">${MODES.map((m) => opt("mode", m.id, mode, m.label)).join("")}</div></div>
-    <div class="field"><b>홈 화면에 앱으로 설치</b><p>${E.app ? "이 기기는 앱으로 열려 있어요." : "아이콘으로 바로 열고 아침 알림도 받을 수 있어요."}</p><div class="opts"><a class="btn ghost small" href="#/install">설치 안내 보기</a></div></div>
-    <div class="field"><b>계정</b><p>${esc(S.user.email)}</p><div class="opts"><button class="btn ghost small" type="button" data-act="signout">나가기</button></div></div>
+    <div class="set-cards">
+    ${card("sun", "화면 모드", `<div class="th-grid">${THEMES.map((t) => `<button class="th-opt" type="button" data-pref="theme" data-val="${t.id}" aria-pressed="${t.id === theme}" title="${esc(t.desc)}">
+        <span class="th-sw" style="background:${t.desk}"><i style="background:${t.paper};color:${t.ink}">가</i></span><span>${t.label}</span></button>`).join("")}</div>
+      <p class="muted">기기마다 따로 기억해요 · 위쪽 반달 단추로도 바로 바꿀 수 있어요.</p>`, esc((THEMES.find((t) => t.id === theme) || {}).desc || ""))}
+    ${card("type", "본문 글자 크기", `<div class="seg fs-seg" role="group" aria-label="본문 글자 크기">${SIZES.map(([v]) => `<button type="button" data-pref="size" data-val="${v}" aria-pressed="${v === size}" aria-label="${SIZE_SHORT[v] || v}"><span style="font-size:${Math.round(20 * Number(v))}px">가</span></button>`).join("")}</div>
+      <div class="size-demo paperink"><span class="ln">태초에 하나님이 천지를 창조하시니라</span></div>`, `${SIZE_SHORT[size] || ""} · 기기마다 따로`)}
+    ${card("head", "듣기", `${row("gauge", "기본 빠르기", seg("plRate", String(Number(pref("plRate", "1")) || 1), [["0.8", "0.8"], ["1", "1.0"], ["1.2", "1.2"]], "기본 빠르기"))}
+      ${row("mic", "따라 하기 쉼", seg("plGap", pref("plGap", "1"), PL_GAPS, "따라 하기 쉼"))}
+      ${row("list", "다음 본문 이어 듣기", tgb("plCont", pref("plCont", "1") === "1", "1", "0", "다음 본문 이어 듣기"))}`, "본문 화면 위쪽 [듣기]")}
+    ${card("sliders", "보기", `${row("star", "별빛 배경", tgb("stars", pref("stars", "on") !== "off", "on", "off", "별빛 배경"))}
+      <p class="muted sub-note">오래된 폰에서 느리면 꺼 주세요.</p>
+      <div class="set-sub">본문을 열 때 기본 방식</div>${seg("mode", mode, MODES.map((m) => [m.id, m.label]), "본문을 열 때 기본 방식")}`)}
+    ${card("bell", "아침 알림 받기", pushBody)}
+    ${card("phone", "앱 · 계정", `${row("dl", E.app ? "앱으로 열려 있어요" : "홈 화면에 앱으로 설치", `<a class="btn ghost small" href="#/install">설치 안내</a>`)}
+      ${row("users", esc(S.user.email), `<button class="btn ghost small" type="button" data-act="signout">나가기</button>`)}`)}
+    </div>
     <p class="muted colo">말씀암송 선포구절 · 다니엘 아마츠 · ${VERSION}</p>`));
 }
 
@@ -1950,7 +2207,7 @@ async function viewSettings() {
 const GROUPS0 = ["교사", "학부모", "학생", "성도", "기타"];
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const ALARM0 = () => ({ id: "a" + Date.now().toString(36), on: true, time: "07:00", days: [0, 1, 2, 3, 4, 5, 6], title: "말씀선포", body: "{이름}님, 오늘 말씀 선포 하셨나요?" });
-const ADM = { lg: { tab: "sess", days: 7, who: "", q: "" }, tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null,
+const ADM = { lg: { tab: "sess", days: 7, who: "", q: "" }, fdrawer: pref("admDrawer", "") === "1", tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null,
   us: { days: 30, grp: "*", metric: "users", sort: "quiet", cache: {}, dcache: {}, err: false } };
 const tsMs = (t) => !t ? 0 : typeof t === "number" ? t : t.toMillis ? t.toMillis() : t.seconds ? t.seconds * 1000 : t instanceof Date ? t.getTime() : 0;
 function ago(t) {
@@ -1992,12 +2249,13 @@ async function viewAdmin(q = {}) {
   if (ADM.tab === "audio") await admAudioLoad();
   if (ADM.tab === "logs") await admLogsLoad();
   if (rid !== rendering) return;
-  const tabs = [["people", `사람 <small>${D.rows.length}</small>`], ["req", `열람 요청${D.reqs.length ? ` <em class="badge">${D.reqs.length}</em>` : ""}`],
-    ...(S.super ? [["stats", "사용 현황"], ["logs", "로그"]] : []), ["alarm", "아침 알림"], ["audio", "음성"], ["content", "본문 올리기"]];
+  // 2.5 — 아이콘 메뉴판 (한눈에 다 보이게 · 잘리지 않게)
+  const tabs = [["people", "users", "사람", `<small>${D.rows.length}</small>`], ["req", "inbox", "열람 요청", D.reqs.length ? `<em class="badge">${D.reqs.length}</em>` : ""],
+    ...(S.super ? [["stats", "chart", "사용 현황", ""], ["logs", "logs", "로그", ""]] : []), ["alarm", "bell", "아침 알림", ""], ["audio", "wave", "음성", ""], ["content", "upload", "본문 올리기", ""]];
   const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "logs" ? admLogs(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "audio" ? admAudio() : ADM.tab === "content" ? admContent() : admPeople(D);
   $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/", `<button class="iconbtn" type="button" data-adm="reload" aria-label="새로 불러오기">${icon("refresh")}</button>`), tome(`
-    <nav class="adm-tabs adm-top" role="tablist" aria-label="관리 메뉴">${tabs.map(([id, lb]) =>
-      `<a class="adm-tab" role="tab" href="#/admin?t=${id}" data-nav aria-selected="${ADM.tab === id}">${lb}</a>`).join("")}</nav>
+    <nav class="adm-menu" role="tablist" aria-label="관리 메뉴" style="--n:${tabs.length}">${tabs.map(([id, ic, lb, ex]) =>
+      `<a class="adm-mi" role="tab" href="#/admin?t=${id}" data-nav aria-selected="${ADM.tab === id}">${icon(ic)}<span>${lb}</span>${ex}</a>`).join("")}</nav>
     <div class="adm-body">${body}</div>${grpList(D)}`));
   admWire(D);
 }
@@ -2023,9 +2281,9 @@ function admPeopleList(D) {
     const st = D.statBy[r.email] || {}, open = ADM.open === r.email;
     return `<div class="pp${open ? " open" : ""}" data-email="${esc(r.email)}">
       <label class="pp-ck"><input type="checkbox" data-sel="${esc(r.email)}" ${ADM.sel.has(r.email) ? "checked" : ""} aria-label="${esc(r.name || r.email)} 고르기"></label>
-      <button class="pp-main" type="button" data-adm="ppopen" aria-expanded="${open}">
+      <button class="pp-main" type="button" data-adm="ppopen" aria-expanded="${open}"><span class="pp-av" aria-hidden="true">${esc((r.name || r.email || "?").trim().charAt(0).toUpperCase())}</span><span class="pp-tx">
         <span class="pp-n"><b>${esc(r.name || "이름 없음")}</b>${r.group ? `<i class="gb">${esc(r.group)}</i>` : ""}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}${r.role === "admin" ? '<i class="gb ad">관리자</i>' : ""}</span>
-        <span class="pp-e">${esc(r.email)} · ${volTxt(r.vols)}</span>
+        <span class="pp-e">${esc(r.email)} · ${volTxt(r.vols)}</span></span>
       </button>
       <span class="pp-seen">${st.lastAt ? `${ago(st.lastAt)}<small>${st.days || 1}일 들어옴</small>` : '<small class="never">아직 안 들어옴</small>'}</span>
     </div>${open ? admEdit(D, r) : ""}`;
@@ -2069,16 +2327,25 @@ function admPeople(D) {
       <span class="sb-g"><input type="text" id="selGroup" list="grpList" placeholder="분류" maxlength="40"><button class="btn small" type="button" data-adm="selgroup">분류 바꾸기</button></span>
       <span class="sb-g">${volChecks("v_sel", VOLS)}<button class="btn small" type="button" data-adm="selvols">책 바꾸기</button></span>
       <span class="sb-g"><button class="btn ghost small danger" type="button" data-adm="seldel">삭제</button><button class="btn ghost small" type="button" data-adm="selnone">고르기 풀기</button></span></div>` : "";
-  return `<div class="adm-acts">
-      <button class="btn small" type="button" data-adm="panel" data-v="add">+ 한 명 등록</button>
-      <button class="btn ghost small" type="button" data-adm="panel" data-v="bulk">여러 명 한꺼번에</button>
-      <button class="btn ghost small" type="button" data-adm="panel" data-v="groups">분류 이름 정하기</button>
-      <button class="btn ghost small" type="button" data-adm="csv">엑셀(CSV) 내려받기</button></div>
+  // 2.5 — 등록 하나만 크게 + 찾기 + ⋯(나머지) · 분류 · 정렬은 서랍(열면 모두 보임, 잘리지 않음)
+  const SORTS = [["name", "이름순"], ["group", "분류순"], ["seen", "최근 접속순"], ["new", "최근 등록순"]];
+  const curG = chips.find((x) => x[0] === ADM.grp) || chips[0], shown = admFilter(D).length;
+  const more = (v, ic, lb, act = "panel") => `<button type="button" data-adm="${act}" data-v="${v}">${icon(ic)}<span>${lb}</span></button>`;
+  return `<div class="adm-bar">
+      <button class="btn small adm-add-btn" type="button" data-adm="panel" data-v="add">${icon("plus")}<span>한 명 등록</span></button>
+      <label class="adm-q">${icon("search")}<input type="search" id="admQ" value="${esc(ADM.q)}" placeholder="이름 · 메일 · 메모" aria-label="사람 찾기"></label>
+      <details class="adm-more"><summary class="iconbtn" aria-label="더 보기">${icon("dots")}</summary>
+        <div class="adm-pop">${more("bulk", "usersplus", "여러 명 한꺼번에")}${more("groups", "tag", "분류 이름 정하기")}${more("", "dl", "엑셀(CSV) 내려받기", "csv")}</div></details></div>
     ${panel}
-    <div class="adm-tools"><input type="search" id="admQ" value="${esc(ADM.q)}" placeholder="이름 · 메일 · 세부 · 메모로 찾기" aria-label="사람 찾기">
-      <select id="admSort" aria-label="정렬">${[["name", "이름순"], ["group", "분류순"], ["seen", "최근 접속순"], ["new", "최근 등록순"]].map(([v, l]) => `<option value="${v}" ${ADM.sort === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>
-    <div class="grp-chips" role="group" aria-label="분류로 보기">${chips.map(([v, l, c]) => `<button class="chip" type="button" data-adm="grp" data-v="${esc(v)}" aria-pressed="${ADM.grp === v}">${esc(l)} <small>${c}</small></button>`).join("")}
-      <label class="pp-all"><input type="checkbox" id="selAll"> 보이는 사람 모두 고르기</label></div>
+    <div class="adm-drawer${ADM.fdrawer ? " open" : ""}">
+      <button class="adm-dh" type="button" data-adm="fdrawer" aria-expanded="${!!ADM.fdrawer}">${icon("filter")}<span>분류 <b>${esc(curG[1])}</b> · ${esc((SORTS.find((x) => x[0] === ADM.sort) || SORTS[0])[1])}</span><em>${shown}명</em>${icon(ADM.fdrawer ? "chevu" : "chevd")}</button>
+      ${ADM.fdrawer ? `<div class="adm-db">
+        <div class="adm-dl">분류로 보기</div>
+        <div class="grp-chips" role="group" aria-label="분류로 보기">${chips.map(([v, l, c]) => `<button class="chip" type="button" data-adm="grp" data-v="${esc(v)}" aria-pressed="${ADM.grp === v}">${esc(l)} <small>${c}</small></button>`).join("")}</div>
+        <div class="adm-dl">정렬</div>
+        <div class="grp-chips" role="group" aria-label="정렬">${SORTS.map(([v, l]) => `<button class="chip" type="button" data-adm="sort" data-v="${v}" aria-pressed="${ADM.sort === v}">${l}</button>`).join("")}</div>
+        <label class="pp-all"><input type="checkbox" id="selAll"> 보이는 사람 ${shown}명 모두 고르기</label></div>` : ""}
+    </div>
     ${sel}
     <div class="pp-list" id="ppList">${admPeopleList(D)}</div>`;
 }
@@ -2442,13 +2709,14 @@ function admAlarm(D) {
   const runs = (L.runs || []).slice(-6).reverse();
   return `${status}
     <p class="muted">알림 받는 사람 <b>${subsN}명</b> · 기기 ${devs}대 · 각자 앱의 설정 → '아침 알림 받기'를 켠 사람에게만 가요.</p>
-    <div class="sec-h">보낼 알림 (최대 3개)</div>
+    <div class="sec-h">보낼 알림 · 최대 3개</div>
     <div id="alarmList">${ADM.alarms.map((a, i) => `<div class="al" data-i="${i}">
-      <div class="al-h"><label class="sw"><input type="checkbox" data-al="on" ${a.on !== false ? "checked" : ""}><span>${a.on !== false ? "켜짐" : "꺼짐"}</span></label>
-        <input type="time" data-al="time" value="${esc(a.time || "07:00")}" aria-label="보낼 시각">
-        <button class="btn ghost small danger" type="button" data-adm="aldel" ${ADM.alarms.length < 2 ? "disabled" : ""}>빼기</button></div>
-      <div class="al-days" role="group" aria-label="요일">${DAYS.map((d, k) => `<button class="chip" type="button" data-adm="alday" data-k="${k}" aria-pressed="${(a.days || []).includes(k)}">${d}</button>`).join("")}
-        <button class="chip" type="button" data-adm="alevery">매일</button><button class="chip" type="button" data-adm="alweek">월~금</button></div>
+      <div class="al-h">${icon("bell")}<b>알림 ${i + 1}</b>
+        <label class="tg"><input type="checkbox" data-al="on" ${a.on !== false ? "checked" : ""}><i aria-hidden="true"></i><span>${a.on !== false ? "켜짐" : "꺼짐"}</span></label>
+        <button class="iconbtn al-del" type="button" data-adm="aldel" aria-label="이 알림 빼기" ${ADM.alarms.length < 2 ? "disabled" : ""}>${icon("trash")}</button></div>
+      <div class="al-t"><input type="time" data-al="time" value="${esc(a.time || "07:00")}" aria-label="보낼 시각">
+        <span class="al-q"><button class="chip small" type="button" data-adm="alevery">매일</button><button class="chip small" type="button" data-adm="alweek">월~금</button></span></div>
+      <div class="al-days" role="group" aria-label="요일">${DAYS.map((d, k) => `<button class="chip" type="button" data-adm="alday" data-k="${k}" aria-pressed="${(a.days || []).includes(k)}">${d}</button>`).join("")}</div>
       <label>제목<input type="text" data-al="title" value="${esc(a.title || "")}" maxlength="40" placeholder="말씀선포"></label>
       <label>문구 <small>{이름} 을 넣으면 받는 사람 이름으로 바뀌어요</small><textarea data-al="body" rows="2" maxlength="160">${esc(a.body || "")}</textarea></label>
       <div class="al-prev"><img src="icons/icon-192.png" alt=""><span><b>${esc((a.title || "말씀선포"))}</b>${esc((a.body || "").replace(/\{이름\}/g, S.user.name || "홍길동"))}</span></div>
@@ -2474,29 +2742,37 @@ function admAlarm(D) {
 }
 
 // ── 음성 (2.4.4): 구글 TTS 목소리 시안 듣고 고르기 — 음성은 GitHub '말씀선포 음성 만들기'가 만들어 넣음
-const AU = { samples: null, cfg: null, log: null };
+const AU = { samples: null, cfg: null, log: null, vols: null, playing: "", el: null };
 async function admAudioLoad(force) {
   if (AU.samples && !force) return;
   const safe = (p, d) => p.catch(() => d);
-  [AU.samples, AU.cfg, AU.log] = await Promise.all([safe(B.listAudioSamples(), []), safe(B.getConfig("audio"), null), safe(B.getConfig("ttsLog"), null)]);
+  [AU.samples, AU.cfg, AU.log, AU.vols] = await Promise.all([safe(B.listAudioSamples(), []), safe(B.getConfig("audio"), null), safe(B.getConfig("ttsLog"), null),
+    Promise.all(VOLS.map((v) => safe(B.getAudioVol(v), null)))]);
 }
 function admAudio() {
   const list = (AU.samples || []).slice().sort((a, b) => (a.gender || "").localeCompare(b.gender || "") || (a.short || "").localeCompare(b.short || ""));
   const chosen = AU.cfg && AU.cfg.voice, L = (AU.log && AU.log.last) || null;
   const gk = (g) => g === "FEMALE" ? "여성" : g === "MALE" ? "남성" : "";
+  const vols = AU.vols || [], done = vols.reduce((a, v) => a + ((v && v.passages) || 0), 0), mb = vols.reduce((a, v) => a + ((v && v.bytes) || 0), 0) / 1048576;
+  const vShort = chosen ? chosen.split("-").pop() : "";
+  const stale = chosen && vols.some((v) => v && v.voice && v.voice !== chosen);
   const rows = list.map((x) => `<div class="au-row${x.voice === chosen ? " on" : ""}">
-      <div class="au-name"><b>${esc(x.label || gk(x.gender) || "목소리")}</b><small>${esc(x.short || "")}${x.voice === chosen ? " · 고른 목소리" : ""}</small></div>
-      <audio controls preload="none" src="data:audio/mpeg;base64,${x.b64 || ""}"></audio>
-      <button class="btn small${x.voice === chosen ? "" : " ghost"}" type="button" data-adm="auvoice" data-v="${esc(x.voice)}" aria-pressed="${x.voice === chosen}">${x.voice === chosen ? "고름" : "이 목소리로"}</button></div>`).join("");
+      <button class="au-play" type="button" data-adm="auplay" data-v="${esc(x.short)}" aria-label="${esc(x.label || "목소리")} 들어 보기" aria-pressed="${AU.playing === x.short}">${icon(AU.playing === x.short ? "pause" : "play", "i fill")}</button>
+      <div class="au-name"><b>${esc(x.label || gk(x.gender) || "목소리")}</b><small>${esc(x.short || "")}</small></div>
+      ${x.voice === chosen ? `<span class="au-on">${icon("check")}고름</span>` : `<button class="btn ghost small" type="button" data-adm="auvoice" data-v="${esc(x.voice)}">이 목소리로</button>`}</div>`).join("");
   return `<div class="audio-adm">
-    <p class="muted" style="margin:0">같은 구절(${esc((list[0] && list[0].ref) || "갈라디아서 2:20")})을 목소리마다 읽었어요. 하나를 고르면 그 목소리로 1·2·3권 전체 음성을 만들어요.</p>
-    ${L ? `<p class="muted">마지막 만들기: ${ago(L.at)} · ${L.ok ? `시안 ${(L.voices || []).length}개 · 빠르기 ${L.rate}` : `<span class="err">실패 — ${esc(L.error || "")}</span>`}</p>` : ""}
-    ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요. 아래 순서대로 한 번 만들어 주세요.</p>`}
+    <section class="card-box"><div class="cb-h">${icon("head")}<b>본문 음성</b><em>${done ? `본문 ${done}개 · ${mb.toFixed(1)}MB` : "아직 없음"}</em></div>
+      <p class="muted" style="margin:0">${done ? `<b>${esc(vShort)}</b> 목소리로 1·2·3권 본문을 절마다 읽어 두었어요. 본문 화면 위쪽 <b>[듣기]</b>를 누르면 들려요.` : "목소리를 고른 뒤 아래 순서대로 '본문 전체 만들기'를 한 번 실행해 주세요."}
+        ${stale ? `<br><span class="err">고른 목소리가 바뀌었어요. 아래 순서대로 다시 만들어 주세요 ('이미 만든 본문도 다시 만들기' 체크).</span>` : ""}</p>
+      ${L ? `<p class="muted" style="margin:0">마지막 만들기: ${ago(L.at)} · ${!L.ok ? `<span class="err">실패 — ${esc(L.error || "")}</span>` : L.mode === "build" ? `${L.running ? "만드는 중 · " : ""}새로 ${L.made || 0}개 · 그대로 ${L.skipped || 0}개${L.chars ? ` · ${Math.round(L.chars / 1000)}천 자` : ""}` : `목소리 시안 ${(L.voices || []).length}개`}</p>` : ""}</section>
+    <section class="card-box"><div class="cb-h">${icon("wave")}<b>목소리</b><em>${esc((list[0] && list[0].ref) || "갈라디아서 2:20")}로 들어 보기</em></div>
+      ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요.</p>`}</section>
     <div class="row-btns"><button class="btn ghost small" type="button" data-adm="aureload">${icon("refresh")}새로 읽기</button></div>
-    <details class="howto" ${rows ? "" : "open"}><summary>음성 만드는 순서</summary>
+    <details class="howto"><summary>음성 만드는 순서</summary>
       <ol>
-        <li>github.com/artist4rhythm-hub/amsong → Settings → Secrets and variables → Actions → <b>New repository secret</b> → 이름 <code>AMSONG_TTS_KEY</code>, 값에는 구글 클라우드 <b>amsong-tts</b> 프로젝트의 API 키 (한 번만)</li>
-        <li>저장소 → <b>Actions</b> → 왼쪽 '<b>말씀선포 음성 만들기</b>' → <b>Run workflow</b> → 1~2분 뒤 '새로 읽기'</li>
+        <li>github.com/artist4rhythm-hub/amsong → Settings → Secrets and variables → Actions → <b>New repository secret</b> → 이름 <code>AMSONG_TTS_KEY</code>, 값에는 구글 클라우드 <b>amsong-tts</b> 프로젝트의 API 키 (한 번만 · 이미 했어요)</li>
+        <li>저장소 → <b>Actions</b> → 왼쪽 '<b>말씀선포 음성 만들기</b>' → <b>Run workflow</b> → mode <b>build</b>(본문 전체) · 권 <b>1,2,3</b> → 30~40분 뒤 '새로 읽기'</li>
+        <li>본문을 고쳐 다시 올린 뒤에도 같은 방법으로 실행하면, 바뀐 본문만 새로 만들어요. 목소리를 바꿨다면 '이미 만든 본문도 다시 만들기'를 체크해요. (mode <b>sample</b> = 목소리 시안 6개만)</li>
       </ol>
       <p class="muted">음성은 구글 무료 한도(한 달 100만 자) 안에서 만들어요. 본문과 음성은 GitHub에 남지 않고 이 앱의 Firebase에만 저장돼요.</p></details>
   </div>`;
@@ -2571,7 +2847,7 @@ function admWire(D) {
     const f = e.target.closest("[data-al]"); if (!f) return;
     const a = ADM.alarms[Number(f.closest(".al").dataset.i)], k = f.dataset.al;
     a[k] = k === "on" ? f.checked : f.value;
-    if (k === "on") f.nextElementSibling.textContent = f.checked ? "켜짐" : "꺼짐";
+    if (k === "on") f.closest("label").querySelector("span").textContent = f.checked ? "켜짐" : "꺼짐";
     if (k === "title" || k === "body") { const pv = f.closest(".al").querySelector(".al-prev span"); pv.innerHTML = `<b>${esc(a.title || "말씀선포")}</b>${esc((a.body || "").replace(/\{이름\}/g, S.user.name || "홍길동"))}`; }
   });
   const vf = $("vapidForm");
@@ -2605,8 +2881,10 @@ async function admClick(t) {
     case "usm": ADM.us.metric = t.dataset.v; viewAdmin(); break;
     case "usreload": await admLoad(true); await admUsage(true); viewAdmin(); toast("새로 읽었어요"); break;
     case "uscsv": usCsv(D); break;
-    case "panel": ADM.panel = t.dataset.v || null; viewAdmin(); break;
+    case "panel": ADM.panel = t.dataset.v || null; viewAdmin(); if (ADM.panel) setTimeout(() => { const f = document.querySelector(".adm-add"); if (f) f.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, 50); break;
     case "grp": ADM.grp = t.dataset.v; viewAdmin(); break;
+    case "sort": ADM.sort = t.dataset.v; viewAdmin(); break;
+    case "fdrawer": ADM.fdrawer = !ADM.fdrawer; setPref("admDrawer", ADM.fdrawer ? "1" : ""); viewAdmin(); break;
     case "ppopen": ADM.open = ADM.open === email ? null : email; viewAdmin(); break;
     case "ppclose": ADM.open = null; viewAdmin(); break;
     case "ppdel": {
@@ -2615,7 +2893,7 @@ async function admClick(t) {
       try { await B.deleteAllow(email); audit("사람 삭제", email); D.rows = D.rows.filter((r) => r.email !== email); ADM.sel.delete(email); ADM.open = null; toast("지웠어요"); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
       break;
     }
-    case "csv": csvDownload(D); break;
+    case "csv": csvDownload(D); { const m = t.closest("details"); if (m) m.open = false; } break;
     case "selnone": ADM.sel.clear(); viewAdmin(); break;
     case "selgroup": case "selvols": {
       const emails = [...ADM.sel]; if (!emails.length) return;
@@ -2670,6 +2948,13 @@ async function admClick(t) {
       break;
     }
     case "aureload": await admAudioLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
+    case "auplay": {
+      const x = (AU.samples || []).find((y) => y.short === t.dataset.v); if (!x) break;
+      if (!AU.el) { AU.el = new Audio(); AU.el.addEventListener("ended", () => { AU.playing = ""; if (ADM.tab === "audio") viewAdmin(); }); }
+      if (AU.playing === x.short) { AU.el.pause(); AU.playing = ""; }
+      else { if (PL.audio) PL.audio.pause(); AU.el.src = "data:audio/mpeg;base64," + x.b64; AU.el.play().catch(() => {}); AU.playing = x.short; }
+      viewAdmin(); break;
+    }
     case "lgt": ADM.lg.tab = t.dataset.v; ADM.lg.who = ""; viewAdmin(); break;
     case "lgd": ADM.lg.days = Number(t.dataset.v) || 7; await admLogsLoad(true); viewAdmin(); break;
     case "lgreload": await admLogsLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
@@ -2739,7 +3024,9 @@ document.addEventListener("click", async (e) => {
     v.say = d === 0 ? 0 : Math.max(0, (v.say || 0) + d);
     return render();
   }
-  if (t.dataset.pref) { setPref(t.dataset.pref, t.dataset.val); if (t.dataset.pref === "theme") { closeThemePop(); toast((THEMES.find((x) => x.id === t.dataset.val) || {}).label + "(으)로 바꿨어요"); } applyTheme(); return render(); }
+  if (t.dataset.pref) { setPref(t.dataset.pref, t.dataset.val);
+    if (t.dataset.pref === "plRate") { PL.rate = Number(t.dataset.val) || 1; if (PL.audio) PL.audio.playbackRate = PL.rate; }
+    if (t.dataset.pref === "plCont") PL.cont = t.dataset.val === "1"; if (t.dataset.pref === "theme") { closeThemePop(); toast((THEMES.find((x) => x.id === t.dataset.val) || {}).label + "(으)로 바꿨어요"); } applyTheme(); return render(); }
   switch (t.dataset.act) {
     case "signin":
       try { await B.signIn(); } catch (err) { toast("로그인하지 못했어요: " + (err.code || err.message)); }
@@ -2807,6 +3094,8 @@ document.addEventListener("click", async (e) => {
     case "nudgex": setPref(t.dataset.v, "x"); t.closest(".nudge").remove(); break;
   }
 });
+// ⋯ 메뉴는 바깥을 누르면 닫힘
+document.addEventListener("click", (e) => { document.querySelectorAll("details.adm-more[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; }); });
 document.addEventListener("keydown", (e) => {
   const t = e.target;
   if ((e.key === "Enter" || e.key === " ") && t.dataset && t.dataset.line) { e.preventDefault(); t.click(); }
@@ -2929,6 +3218,7 @@ async function render() {
   const nl = document.querySelector('[data-keep="l"]'), nr = document.querySelector('[data-keep="r"]');
   if (nl && S._keepL != null) nl.scrollTop = S._keepL;
   if (nr && keepR != null) nr.scrollTop = keepR;
+  try { plAfterRender(); } catch (e) { console.error(e); }
 }
 
 // ───────── 시작

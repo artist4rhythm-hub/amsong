@@ -1,5 +1,8 @@
 # 말씀선포 음성 만들기 — 구글 TTS(Chirp 3 HD)로 말씀을 읽은 음성을 만들어 Firebase(amsong-99f03)에 넣습니다.
 # 손으로 누를 때만 실행됩니다: GitHub 저장소 → Actions → '말씀선포 음성 만들기' → Run workflow
+#   build  = 관리 → 음성에서 고른 목소리로 본문마다 절별 음성 → amsong_audio/{권}/passages/{본문id}(목록) · {본문id}_{번호}(0 = 본문 주소, 1~ = 절)
+#            이미 같은 글·목소리·빠르기로 만든 본문은 건너뜀 (본문을 고쳐 올린 뒤 다시 돌리면 바뀐 본문만 새로 만듦)
+#   sample = 목소리 시안 6개
 # 필요한 비밀값
 #   AMSONG_TTS_KEY     = 구글 클라우드 'amsong-tts' 프로젝트의 API 키 (Text-to-Speech 전용)
 #   AMSONG_FIREBASE_SA = Firebase(amsong-99f03) 서비스 계정 키 (아침 알림과 같은 것)
@@ -10,11 +13,20 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "sample = 목소리 시안 만들기 (갈라디아서 2:20)"
+        description: "build = 고른 목소리로 본문 전체 음성 만들기 · sample = 목소리 시안 만들기 (갈라디아서 2:20)"
         required: true
-        default: "sample"
+        default: "build"
         type: choice
-        options: [sample]
+        options: [build, sample]
+      vols:
+        description: "만들 권 (예: 1,2,3 또는 3)"
+        required: true
+        default: "1,2,3"
+      force:
+        description: "이미 만든 본문도 다시 만들기"
+        required: true
+        default: false
+        type: boolean
       rate:
         description: "읽는 빠르기 (1.0 = 보통, 0.9 = 조금 천천히)"
         required: true
@@ -30,7 +42,7 @@ concurrency:
 jobs:
   tts:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 120
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -42,6 +54,8 @@ jobs:
           TTS_KEY: ${{ secrets.AMSONG_TTS_KEY }}
           MODE: ${{ inputs.mode }}
           RATE: ${{ inputs.rate }}
+          VOLS: ${{ inputs.vols }}
+          FORCE: ${{ inputs.force }}
         run: |
           if [ -z "$FIREBASE_SA" ]; then echo "비밀값 AMSONG_FIREBASE_SA 가 없어요"; exit 1; fi
           if [ -z "$TTS_KEY" ]; then echo "비밀값 AMSONG_TTS_KEY 가 아직 없어요 (Settings → Secrets and variables → Actions)"; exit 1; fi
@@ -66,27 +80,82 @@ jobs:
             if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
             return j;
           }
-          // "고린도전서 13Ⓐ:1-13" → "고린도전서 13장 1절에서 13절"
-          function sayRef(ref) {
+          // "고린도전서 13Ⓐ:1-13" → "고린도전서 13장 1절에서 13절" · "1 Corinthians 13:1-13" → "First Corinthians, chapter 13, verses 1 to 13"
+          function sayRef(ref, lang) {
             const m = String(ref).replace(/Ⓐ/g, "").match(/^(.*?)\s*(\d+):(\d+)(?:-(\d+))?$/);
             if (!m) return String(ref).replace(/Ⓐ/g, "");
+            if (lang === "en") {
+              const book = m[1].replace(/^1 /, "First ").replace(/^2 /, "Second ").replace(/^3 /, "Third ");
+              return `${book}, chapter ${m[2]}, ` + (m[4] ? `verses ${m[3]} to ${m[4]}` : `verse ${m[3]}`);
+            }
             return `${m[1]} ${m[2]}장 ${m[3]}절` + (m[4] ? `에서 ${m[4]}절` : "");
           }
           const verseText = (p) => p.verses.map((v) => (v.lines || []).join("\n")).join("\n\n");
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
           async function speak(voice, text) {
             const body = { input: { text }, voice: { languageCode: voice.languageCodes[0], name: voice.name }, audioConfig: { audioEncoding: "MP3", speakingRate: RATE } };
-            try { return await api("text:synthesize", body); }
-            catch (e) {
-              if (!/rate|speaking/i.test(e.message)) throw e;
-              delete body.audioConfig.speakingRate;                 // 빠르기를 못 바꾸는 목소리면 보통 빠르기로
-              return await api("text:synthesize", body);
+            for (let t = 0; ; t++) {
+              try { return await api("text:synthesize", body); }
+              catch (e) {
+                if (/rate|speaking/i.test(e.message) && body.audioConfig.speakingRate) { delete body.audioConfig.speakingRate; continue; } // 빠르기를 못 바꾸는 목소리면 보통 빠르기로
+                if (t < 6 && /quota|exhausted|429|50\d|unavailable|deadline|internal|fetch failed/i.test(e.message)) { await sleep(4000 * (t + 1)); continue; } // 잠깐 막히면 쉬었다가 다시
+                throw e;
+              }
             }
           }
           const LABEL = { Sulafat: "따뜻한 여성", Gacrux: "차분한 여성", Kore: "또렷한 여성", Aoede: "밝은 여성", Leda: "젊은 여성",
             Charon: "차분한 남성", Iapetus: "맑은 남성", Schedar: "고른 남성", Orus: "단단한 남성", Achird: "다정한 남성" };
           const WANT = ["Sulafat", "Gacrux", "Kore", "Charon", "Iapetus", "Schedar"];
 
+          async function build() {
+            const cfg = (await db.doc("amsong_config/audio").get()).data() || {};
+            const voiceKo = cfg.voice;
+            if (!voiceKo) throw new Error("아직 목소리를 고르지 않았어요 (앱 → 관리 → 음성)");
+            const short = voiceKo.split("-").pop();
+            const voiceEn = "en-US-Chirp3-HD-" + short;
+            const VOLS = String(process.env.VOLS || "1,2,3").split(/[^0-9]+/).filter(Boolean);
+            const FORCE = String(process.env.FORCE) === "true";
+            const V = { ko: { name: voiceKo, languageCodes: ["ko-KR"] }, en: { name: voiceEn, languageCodes: ["en-US"] } };
+            const sigOf = (s) => { let h = 2166136261; for (const c of s) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
+            let made = 0, skipped = 0, parts = 0, chars = 0, bytes = 0;
+            const t0 = Date.now();
+            for (const vol of VOLS) {
+              const stages = (await db.collection("amsong_books/" + vol + "/stages").get()).docs.map((d) => d.data()).sort((a, b) => a.num - b.num);
+              if (!stages.length) { console.log(vol + "권 본문이 없어요 · 건너뜀"); continue; }
+              let volN = 0, volBytes = 0;
+              for (const st of stages) {
+                const lang = st.lang === "en" ? "en" : "ko", voice = V[lang];
+                for (const p of st.passages || []) {
+                  const texts = [sayRef(p.ref, lang) + "."].concat((p.verses || []).map((v) => (v.lines || []).join("\n").replace(/Ⓐ/g, "")));
+                  const sig = sigOf(voice.name + "|" + RATE + "|" + texts.join("|"));
+                  const idxRef = db.doc("amsong_audio/" + vol + "/passages/" + p.id);
+                  const old = (await idxRef.get()).data();
+                  if (!FORCE && old && old.sig === sig) { skipped++; volN++; volBytes += old.bytes || 0; continue; }
+                  const info = [];
+                  let pb = 0;
+                  const one = async (i) => {
+                    const r = await speak(voice, texts[i]);
+                    const b = Math.round(r.audioContent.length * 0.75);
+                    await db.doc("amsong_audio/" + vol + "/passages/" + p.id + "_" + i).set({ pid: p.id, i, n: i ? p.verses[i - 1].n : 0, b64: r.audioContent, bytes: b });
+                    info[i] = { i, n: i ? p.verses[i - 1].n : 0, bytes: b };
+                    pb += b; chars += texts[i].length; parts++;
+                  };
+                  for (let i = 0; i < texts.length; i += 5) await Promise.all(texts.slice(i, i + 5).map((_, k) => one(i + k)));   // 5개씩 함께
+                  if (old && old.count > texts.length) for (let i = texts.length; i < old.count; i++) await db.doc("amsong_audio/" + vol + "/passages/" + p.id + "_" + i).delete();
+                  await idxRef.set({ pid: p.id, vol: String(vol), num: st.num, ref: p.ref, lang, voice: voice.name, rate: RATE, sig, count: texts.length, parts: info, bytes: pb, at: FV.serverTimestamp() });
+                  made++; volN++; volBytes += pb; bytes += pb;
+                  console.log("만듦: " + vol + "권 " + st.num + "단계 " + p.ref + " · " + texts.length + "조각 · " + Math.round(pb / 1024) + "KB");
+                  if (made % 10 === 0) await logRef.set({ last: { mode: MODE, ok: true, running: true, at: Date.now(), rate: RATE, voice: voiceKo, made, skipped, chars, error: "" } }, { merge: true });
+                }
+              }
+              await db.doc("amsong_audio/" + vol).set({ vol: String(vol), voice: voiceKo, rate: RATE, passages: volN, bytes: volBytes, at: FV.serverTimestamp() }, { merge: true });
+            }
+            await logRef.set({ last: { mode: MODE, ok: true, running: false, at: Date.now(), rate: RATE, voice: voiceKo, vols: VOLS, made, skipped, parts, chars, bytes, secs: Math.round((Date.now() - t0) / 1000), error: "" } }, { merge: true });
+            console.log("본문 음성 완료 · 새로 " + made + "개 · 그대로 " + skipped + "개 · " + chars + "자 · " + Math.round(bytes / 1048576 * 10) / 10 + "MB");
+          }
+
           try {
+            if (MODE === "build") { await build(); process.exit(0); }
             if (MODE !== "sample") throw new Error("아직 준비 중인 방식이에요: " + MODE);
             const { voices = [] } = await api("voices?languageCode=ko-KR");
             const chirp = voices.filter((v) => /Chirp3-HD/.test(v.name));
@@ -98,7 +167,7 @@ jobs:
             const st = (await db.doc("amsong_books/1/stages/1").get()).data();
             const p = st && (st.passages || []).find((x) => /^갈라디아서 2:20/.test(x.ref));
             if (!p) throw new Error("1권 1단계에서 갈라디아서 2:20을 찾지 못했어요 (본문을 먼저 올려 주세요)");
-            const text = sayRef(p.ref) + ".\n\n" + verseText(p);
+            const text = sayRef(p.ref, "ko") + ".\n\n" + verseText(p);
 
             const done = [];
             for (const v of pick) {

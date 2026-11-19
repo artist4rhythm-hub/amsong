@@ -22,6 +22,10 @@ on:
         description: "만들 권 (예: 1,2,3 또는 3)"
         required: true
         default: "1,2,3"
+      only:
+        description: "이 본문만 (비우면 전체 · 예: v1s1p6,v3s11p1)"
+        required: false
+        default: ""
       force:
         description: "이미 만든 본문도 다시 만들기"
         required: true
@@ -56,6 +60,7 @@ jobs:
           RATE: ${{ inputs.rate }}
           VOLS: ${{ inputs.vols }}
           FORCE: ${{ inputs.force }}
+          ONLY: ${{ inputs.only }}
         run: |
           if [ -z "$FIREBASE_SA" ]; then echo "비밀값 AMSONG_FIREBASE_SA 가 없어요"; exit 1; fi
           if [ -z "$TTS_KEY" ]; then echo "비밀값 AMSONG_TTS_KEY 가 아직 없어요 (Settings → Secrets and variables → Actions)"; exit 1; fi
@@ -90,7 +95,13 @@ jobs:
             }
             return `${m[1]} ${m[2]}장 ${m[3]}절` + (m[4] ? `에서 ${m[4]}절` : "");
           }
-          const verseText = (p) => p.verses.map((v) => (v.lines || []).join("\n")).join("\n\n");
+          // 책의 한 줄 = 한 호흡: 줄바꿈 대신 쉼표로 이어 읽고 절 끝은 마침표 (줄바꿈을 그대로 보내면 엉뚱한 말이 끼어드는 일이 있었음 · 2.5.1)
+          const clean = (l) => String(l).replace(/Ⓐ/g, "").replace(/[()（）\[\]「」『』〔〕]/g, "").replace(/\s+/g, " ").trim();
+          const sayLines = (lines) => {
+            const a = (lines || []).map(clean).filter(Boolean);
+            return a.map((l, i) => /[.,!?;:…”’"']$/.test(l) ? l : l + (i < a.length - 1 ? "," : ".")).join(" ");
+          };
+          const verseText = (p) => p.verses.map((v) => sayLines(v.lines)).join(" ");
           const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
           async function speak(voice, text) {
             const body = { input: { text }, voice: { languageCode: voice.languageCodes[0], name: voice.name }, audioConfig: { audioEncoding: "MP3", speakingRate: RATE } };
@@ -115,6 +126,7 @@ jobs:
             const voiceEn = "en-US-Chirp3-HD-" + short;
             const VOLS = String(process.env.VOLS || "1,2,3").split(/[^0-9]+/).filter(Boolean);
             const FORCE = String(process.env.FORCE) === "true";
+            const ONLY = String(process.env.ONLY || "").split(/[^A-Za-z0-9]+/).filter(Boolean);
             const V = { ko: { name: voiceKo, languageCodes: ["ko-KR"] }, en: { name: voiceEn, languageCodes: ["en-US"] } };
             const sigOf = (s) => { let h = 2166136261; for (const c of s) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); };
             let made = 0, skipped = 0, parts = 0, chars = 0, bytes = 0;
@@ -126,7 +138,8 @@ jobs:
               for (const st of stages) {
                 const lang = st.lang === "en" ? "en" : "ko", voice = V[lang];
                 for (const p of st.passages || []) {
-                  const texts = [sayRef(p.ref, lang) + "."].concat((p.verses || []).map((v) => (v.lines || []).join("\n").replace(/Ⓐ/g, "")));
+                  if (ONLY.length && !ONLY.includes(p.id)) continue;
+                  const texts = [sayRef(p.ref, lang) + "."].concat((p.verses || []).map((v) => sayLines(v.lines)));
                   const sig = sigOf(voice.name + "|" + RATE + "|" + texts.join("|"));
                   const idxRef = db.doc("amsong_audio/" + vol + "/passages/" + p.id);
                   const old = (await idxRef.get()).data();
@@ -136,7 +149,7 @@ jobs:
                   const one = async (i) => {
                     const r = await speak(voice, texts[i]);
                     const b = Math.round(r.audioContent.length * 0.75);
-                    await db.doc("amsong_audio/" + vol + "/passages/" + p.id + "_" + i).set({ pid: p.id, i, n: i ? p.verses[i - 1].n : 0, b64: r.audioContent, bytes: b });
+                    await db.doc("amsong_audio/" + vol + "/passages/" + p.id + "_" + i).set({ pid: p.id, i, n: i ? p.verses[i - 1].n : 0, sig, b64: r.audioContent, bytes: b });
                     info[i] = { i, n: i ? p.verses[i - 1].n : 0, bytes: b };
                     pb += b; chars += texts[i].length; parts++;
                   };
@@ -167,7 +180,7 @@ jobs:
             const st = (await db.doc("amsong_books/1/stages/1").get()).data();
             const p = st && (st.passages || []).find((x) => /^갈라디아서 2:20/.test(x.ref));
             if (!p) throw new Error("1권 1단계에서 갈라디아서 2:20을 찾지 못했어요 (본문을 먼저 올려 주세요)");
-            const text = sayRef(p.ref, "ko") + ".\n\n" + verseText(p);
+            const text = sayRef(p.ref, "ko") + ". " + verseText(p);
 
             const done = [];
             for (const v of pick) {

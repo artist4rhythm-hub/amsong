@@ -261,8 +261,15 @@ export async function getAudioIndex(vol, pid) {
   const s = await getDoc(doc(db, "amsong_audio", String(vol), "passages", pid));
   return s.exists() ? s.data() : null;
 }
-export async function getAudioPart(vol, pid, i) {
-  const s = await cacheFirst(doc(db, "amsong_audio", String(vol), "passages", pid + "_" + i));
+// 기기에 받아 둔 조각이 지금 음성(sig)과 같으면 그대로 씀 — 다시 받지 않아 무료 전송량을 아낌 (2.5.1)
+export async function getAudioPart(vol, pid, i, sig) {
+  const ref = doc(db, "amsong_audio", String(vol), "passages", pid + "_" + i);
+  try {
+    const c = await getDocFromCache(ref);
+    if (c.exists() && (!sig || c.data().sig === sig)) return c.data();
+  } catch (e) {}
+  let s;
+  try { s = await getDocFromServer(ref); } catch (e) { s = await getDoc(ref); }
   return s.exists() ? s.data() : null;
 }
 export async function getAudioVol(vol) {

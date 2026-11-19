@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.5.0";
+const VERSION = "2.5.1";
 const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -1788,9 +1788,10 @@ const plAudio = () => {
 };
 const plB64 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return URL.createObjectURL(new Blob([u], { type: "audio/mpeg" })); };
 async function plUrl(vol, pid, i) {
-  const k = pid + "_" + i;
+  const sig = PL.idx && PL.idx.pid === pid ? PL.idx.sig : "";
+  const k = pid + "_" + i + "_" + sig;
   if (PL.urls.has(k)) return PL.urls.get(k);
-  const d = await B.getAudioPart(vol, pid, i);
+  const d = await B.getAudioPart(vol, pid, i, sig);
   if (!d || !d.b64) return null;
   const u = plB64(d.b64);
   PL.urls.set(k, u);

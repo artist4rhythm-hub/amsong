@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.5.1";
+const VERSION = "2.5.2";
 const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -1895,7 +1895,7 @@ function plMark() {
     const vs = ln.closest(".verse");
     vs.classList.add("pl-now");
     const r = vs.getBoundingClientRect(), bar = document.getElementById("plBar");
-    const bottom = window.innerHeight - (bar && !PL.mini ? bar.offsetHeight + 12 : 12);
+    const bottom = window.innerHeight - (bar && !PL.mini && !bar.classList.contains("top") ? bar.offsetHeight + 12 : 12);
     if (r.top < 60 || r.bottom > bottom) vs.scrollIntoView({ block: "center", behavior: "smooth" });
     return;
   }
@@ -1911,8 +1911,10 @@ const plSec = () => { const a = plAudio(); return a.duration ? Math.round(a.dura
 function plDraw() {
   let bar = document.getElementById("plBar");
   const show = PL.open && /^#\/p\//.test(location.hash) && !(S.ctx && S.ctx.mode === "rec");
-  document.documentElement.classList.toggle("pl-on", show && !PL.mini);
-  document.documentElement.classList.toggle("pl-mini", show && PL.mini);
+  // 패드 · 컴퓨터(펼친 책 화면): 위쪽 머리줄 가운데 빈자리에 가로로 — 책 높이를 줄이지 않음 (2.5.2)
+  const top = show && !!document.querySelector(".ob-desk");
+  document.documentElement.classList.toggle("pl-on", show && !PL.mini && !top);
+  document.documentElement.classList.toggle("pl-mini", show && PL.mini && !top);
   document.querySelectorAll('[data-pl="toggle"]').forEach((b) => b.setAttribute("aria-pressed", String(PL.open)));
   if (!show) { if (bar) bar.remove(); return; }
   if (!bar) { bar = document.createElement("div"); bar.id = "plBar"; bar.setAttribute("role", "region"); bar.setAttribute("aria-label", "듣기"); document.body.appendChild(bar); }
@@ -1921,13 +1923,13 @@ function plDraw() {
   const playBtn = `<button class="pl-play" type="button" data-pl="${PL.playing ? "pause" : "play"}" aria-label="${PL.playing ? "멈춤" : "듣기"}">${icon(PL.playing ? "pause" : "play", "i fill")}</button>`;
   const what = PL.state === "load" ? "불러오는 중…" : PL.state === "none" ? "이 본문 음성은 아직 준비 중이에요" : PL.state === "err" ? "음성을 받지 못했어요 · 인터넷 확인"
     : PL.state === "gap" ? `따라 해 보세요 · ${vn}절` : PL.state === "done" ? "다 들었어요" : PL.i === 0 ? "본문 주소" : `${vn}절${PL.playing ? " 듣는 중" : ""}`;
-  bar.className = "pl" + (PL.mini ? " mini" : "") + (PL.state === "gap" ? " gap" : "");
+  bar.className = "pl" + (PL.mini ? " mini" : top ? " top" : "") + (PL.state === "gap" ? " gap" : "");
   if (PL.mini) {
     bar.innerHTML = `${playBtn}<span class="pl-mini-t">${PL.i > 0 ? vn + "절" : "듣기"}</span>
       <button class="pl-ic" type="button" data-pl="expand" aria-label="듣기 막대 펼치기">${icon("chevu")}</button>`;
     return;
   }
-  const chip = (k, ic, label, on) => `<button class="pl-chip" type="button" data-pl="${k}" aria-pressed="${on}">${icon(ic)}<span>${label}</span></button>`;
+  const chip = (k, ic, label, on) => `<button class="pl-chip" type="button" data-pl="${k}" aria-pressed="${on}" title="${label}">${icon(ic)}<span>${label}</span></button>`;
   bar.innerHTML = `<div class="pl-prog"><i style="width:${n ? ((PL.i / n) * 100).toFixed(1) : 0}%"></i></div>
     <div class="pl-l1">${playBtn}
       <div class="pl-meta"><b>${what}</b><span>${ref}${n ? ` · ${PL.i} / ${nv}` : ""}</span></div>
@@ -1944,7 +1946,6 @@ function plOpen() {
   PL.open = true; PL.mini = false;
   plDraw();
   plLoad(S.ctx, 0, true);
-  if (S.ctx.book) render();   // 펼친 책은 막대 높이만큼 쪽을 다시 나눔
   uBump("act", "listen");
 }
 function plClose() {
@@ -1952,7 +1953,6 @@ function plClose() {
   if (PL.audio) PL.audio.pause();
   PL.open = false; PL.playing = false; PL.state = "idle";
   plDraw(); plMark();
-  if (S.ctx && S.ctx.book) render();
   if ("mediaSession" in navigator) try { navigator.mediaSession.metadata = null; } catch (e) {}
 }
 // 화면을 다시 그린 뒤: 다른 본문으로 옮겨 갔으면 그 본문으로 바꿈 · 띠 다시 칠함
@@ -1979,7 +1979,7 @@ document.addEventListener("click", (e) => {
     if (k === "prev") return plGo(PL.i - 1);
     if (k === "next") return plGo(PL.i + 1);
     if (k === "close") return plClose();
-    if (k === "mini" || k === "expand") { PL.mini = k === "mini"; plDraw(); if (S.ctx && S.ctx.book) render(); return; }
+    if (k === "mini" || k === "expand") { PL.mini = k === "mini"; plDraw(); return; }
     if (k === "rep") { PL.rep = !PL.rep; if (PL.rep) PL.follow = false; }
     if (k === "follow") { PL.follow = !PL.follow; if (PL.follow) PL.rep = false; }
     if (k === "cont") { PL.cont = !PL.cont; setPref("plCont", PL.cont ? "1" : "0"); }

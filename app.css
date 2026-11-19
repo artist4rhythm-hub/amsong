@@ -1575,3 +1575,23 @@ html.pl-on .verses[data-pid] .vn { cursor: pointer; }
 .set-card .fs-seg button { min-height: 44px; font-family: var(--serif); font-weight: 800; }
 .adm-body .al-t input[type="time"] { width: 200px; font-size: 20px; }
 html.pl-mini .desk-main { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+/* 듣기 막대 — 패드 · 컴퓨터(펼친 책): 머리줄 가운데에 가로 한 줄 (2.5.2) */
+#plBar.pl.top { top: calc(6px + env(safe-area-inset-top)); bottom: auto; right: auto; margin: 0; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100vw - 400px); height: 44px; display: flex; align-items: center; gap: 2px; padding: 0 6px 0 4px !important; border-radius: 22px !important; box-shadow: 0 6px 18px rgba(0, 0, 0, .25); overflow: hidden; }
+#plBar.top .pl-l1 { display: contents; }
+#plBar.top .pl-prog { position: absolute; left: 22px; right: 22px; bottom: 0; height: 2px; margin: 0; border-radius: 2px; }
+#plBar.top .pl-play { order: 1; width: 36px; height: 36px; margin: 0 6px 0 0; }
+#plBar.top .pl-play svg { width: 18px; height: 18px; }
+#plBar.top .pl-meta { order: 2; flex: 0 1 auto; min-width: 90px; max-width: 220px; margin-right: 2px; }
+#plBar.top .pl-meta b { font-size: 13px; }
+#plBar.top .pl-meta span { font-size: 11px; }
+#plBar.top [data-pl="prev"] { order: 3; }
+#plBar.top [data-pl="next"] { order: 4; }
+#plBar.top .pl-chips { order: 5; margin: 0 4px; gap: 4px; flex: none; }
+#plBar.top .pl-chip { flex: none; height: 30px; padding: 0 10px; }
+#plBar.top .pl-chip.rate { flex: none; width: auto; padding: 0 9px; }
+#plBar.top [data-pl="mini"] { order: 6; }
+#plBar.top [data-pl="close"] { order: 7; }
+#plBar.top .pl-ic { width: 32px; height: 36px; }
+@media (max-width: 1260px) { #plBar.top .pl-chip:not(.rate) span { display: none; } #plBar.top .pl-chip:not(.rate) { width: 34px; padding: 0; } #plBar.top .pl-chip svg { display: block; } }
+@media (max-width: 860px) { #plBar.top .pl-meta { max-width: 130px; } }

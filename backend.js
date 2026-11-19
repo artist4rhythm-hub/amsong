@@ -7,7 +7,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, getDoc, getDocFromCache, getDocFromServer, setDoc, updateDoc, deleteDoc, collection, getDocs, query, orderBy, limit,
+  doc, getDoc, getDocFromCache, getDocFromServer, setDoc, updateDoc, deleteDoc, collection, getDocs, getDocsFromServer, query, orderBy, limit,
   where, documentId, writeBatch, serverTimestamp, increment, deleteField
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
@@ -214,6 +214,41 @@ export async function listPush() {
 }
 
 export const deleteAllow = (email) => deleteDoc(doc(db, "amsong_allow", lower(email)));
+
+// ── 로그 (2.4.5 · 수퍼 관리자만 읽기) ─────────────────────────
+//  amsong_sessions/{uid}_{시작ms}: 한 번 들어와서 나갈 때까지 — 들어온 · 나간 시각, 머문 초, 기기, 버전, 본 화면 순서(본문 주소까지)
+//  amsong_audit/{자동}: 관리자가 바꾼 것 — 누가 · 언제 · 무엇을 (사람 등록 · 삭제 · 허용 · 본문 올리기 · 알림 · 목소리 …)
+//  본문에 남긴 형광펜 · 메모 글, 녹음, 위치는 남기지 않음
+export async function isSuper() {
+  try { await getDocsFromServer(query(collection(db, "amsong_sessions"), limit(1))); return true; }
+  catch (e) { return false; }
+}
+export async function saveSession(user, id, x) {
+  const end = Date.now(), cut = (v, n) => String(v || "").slice(0, n);
+  await setDoc(doc(db, "amsong_sessions", id), {
+    uid: user.uid, email: lower(user.email), name: cut(x.name, 60), start: x.start, end, dur: Math.max(0, Math.round((end - x.start) / 1000)),
+    device: cut(x.device, 20), ver: cut(x.ver, 20), os: cut(x.os, 20), br: cut(x.br, 30), pwa: !!x.pwa,
+    flow: (x.flow || []).slice(0, 80).map((f) => cut(f, 60))
+  });
+}
+export async function listSessions(fromMs) {
+  const s = await getDocs(query(collection(db, "amsong_sessions"), where("start", ">=", fromMs)));
+  return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+export async function cleanSessions(beforeMs) {
+  const s = await getDocs(query(collection(db, "amsong_sessions"), where("start", "<", beforeMs), limit(300)));
+  await Promise.all(s.docs.map((d) => deleteDoc(d.ref).catch(() => {})));
+  return s.size;
+}
+export async function addAudit(user, byName, a) {
+  const cut = (v, n) => String(v || "").slice(0, n);
+  await setDoc(doc(collection(db, "amsong_audit")), { by: user.uid, byEmail: lower(user.email), byName: cut(byName, 60),
+    action: cut(a.action, 60), target: cut(a.target, 120), detail: cut(a.detail, 200), at: serverTimestamp(), atMs: Date.now() });
+}
+export async function listAudit(fromMs) {
+  const s = await getDocs(query(collection(db, "amsong_audit"), where("atMs", ">=", fromMs)));
+  return s.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
 
 // ── 말씀 음성 (2.4.4) — 목소리 시안은 관리자만, GitHub '음성 만들기'가 만들어 넣음
 export async function listAudioSamples() {

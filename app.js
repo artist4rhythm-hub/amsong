@@ -2,8 +2,8 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.4.4";
-const VERSION_DATE = "2026.11.18";
+const VERSION = "2.4.5";
+const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
 const VOL_SHORT = { "1": "1권", "2": "2권", "3": "3권" };
@@ -592,6 +592,7 @@ function usgEnv() {
   return { device, os, br: E.browser.replace(" 브라우저", ""), pwa: !!E.app };
 }
 async function flushUsage() {
+  sessSave(document.hidden);
   if (!USG.dirty || !usgOn()) return;
   const P = { screens: USG.screens, acts: USG.acts, hours: USG.hours, errs: USG.errs, stg: USG.stg, opens: USG.opens, mins: USG.mins, loadMs: USG.loadMs };
   USG.screens = {}; USG.acts = {}; USG.hours = {}; USG.errs = {}; USG.stg = {}; USG.opens = 0; USG.mins = 0; USG.loadMs = 0; USG.dirty = false;
@@ -608,7 +609,8 @@ setInterval(flushUsage, 60000);
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) { USG.hiddenAt = Date.now(); flushUsage(); return; }
   // 30분 넘게 덮어 뒀다가 다시 열면 '한 번 더 연 것'으로
-  if (USG.hiddenAt && Date.now() - USG.hiddenAt > 30 * 60000) { USG.opens++; USG.dirty = true; }
+  if (USG.hiddenAt && Date.now() - USG.hiddenAt > 30 * 60000) { USG.opens++; USG.dirty = true;
+    SESS.cur = null; sessStart(); sessPush(SCREEN_NAME[USG.cur] || USG.cur || "다시 엶"); }
   USG.lastAct = Date.now();
 });
 window.addEventListener("pagehide", flushUsage);
@@ -619,7 +621,8 @@ function usgScreen(parts, q) {
     : r === "p" ? "p_" + (MODES.some((m) => m.id === q.m) ? q.m : pref("mode", "read"))
     : r === "x" ? "x_" + (b2 || "") : r === "l" ? "list" : r === "t" ? "tab" : r;
   const key = location.hash.split("?")[0] + "|" + k;
-  if (key !== USG.key) { USG.key = key; uBump("screen", k); if (r === "p") uBump("stg", parts[1] + "_" + parts[2]); }
+  if (key !== USG.key) { USG.key = key; uBump("screen", k); if (r === "p") uBump("stg", parts[1] + "_" + parts[2]);
+    sessStart(); sessPush(sessLabel(parts, k)); }
 }
 // 누른 기능 (횟수만)
 function usgClick(t) {
@@ -629,8 +632,44 @@ function usgClick(t) {
     : d.act && ACT_NAME[d.act] ? d.act
     : d.pref ? "pref_" + d.pref : d.hide ? "hideWay" : d.line ? "lineOpen" : d.tok ? "recMark" : d.say ? "sayStep"
     : d.tool ? "penTool" : d.memo ? "memoOpen" : d.pin ? "tabPin" : "";
-  if (k) uBump("act", k);
+  if (k) { uBump("act", k); if (FLOW_ACT[k]) sessPush(FLOW_ACT[k]); }
 }
+// ───────── 접속 기록 (2.4.5 · 수퍼 관리자만 보는 '로그') — '목자의 삶' 48단계 방식 + 본문 주소까지
+//  들어와서 나갈 때까지 한 칸: 들어온 · 나간 시각, 머문 시간, 기기 · 버전, 본 화면 순서(예: 3권 11단계 · 느헤미야 4:8-22 · 가리기)
+//  화면 이름과 본문 주소 · 누른 기능 이름만 — 형광펜 · 메모 글, 녹음, 위치는 남기지 않음
+const SESS = { cur: null };
+const FLOW_ACT = { memoOn: "✓ 외웠어요", recsave: "● 녹음 채점 저장", memosave: "✎ 메모 저장", install: "앱 설치", pushon: "알림 켬", pushoff: "알림 끔" };
+function sessStart() {
+  if (SESS.cur || !usgOn()) return;
+  const t = Date.now(); SESS.cur = { id: `${S.user.uid}_${t}`, start: t, flow: [], dirty: true, savedAt: 0 };
+}
+function sessPush(label) {
+  const c = SESS.cur; if (!c || !label) return;
+  label = String(label).slice(0, 60);
+  if (c.flow[c.flow.length - 1] === label) return;
+  if (c.flow.length < 80) c.flow.push(label); else c.flow[79] = "… (더 있음)";
+  c.dirty = true;
+}
+function sessSave(force) {
+  const c = SESS.cur; if (!c || !usgOn()) return;
+  if (!force && !c.dirty && Date.now() - c.savedAt < 120000) return;
+  if (!force && !c.dirty && Date.now() - USG.lastAct > 60000) return;   // 켜 두기만 했으면 나간 시각을 늘리지 않음
+  const nm = (S.allow && S.allow.name) || S.user.name || "";
+  c.dirty = false; c.savedAt = Date.now();
+  B.saveSession(S.user, c.id, { name: nm, start: c.start, ver: VERSION, ...usgEnv(), flow: c.flow }).catch(() => { c.dirty = true; });
+}
+// 화면 → 로그에 남길 한 줄 (본문은 몇 권 몇 단계 어느 본문을 어떤 방식으로)
+function sessLabel(parts, k) {
+  const [r, a, b2, c] = parts;
+  const short = { p_read: "읽기", p_hide: "가리기", p_say: "선포", p_rec: "녹음 채점" };
+  if (r === "p") { const st = S.stages[a + "_" + b2], p = st && (st.passages || []).find((x) => x.no === Number(c));
+    return `${a}권 ${b2}단계 · ${p ? p.ref.replace(/Ⓐ/g, "") : c + "번"} · ${short[k] || "본문"}`; }
+  if (r === "s") return `${a}권 ${b2}단계 구절표`;
+  if (r === "b") return `${a}권 펼침`;
+  if (r === "l") return `${a}권 ${b2}단계 회개 기도`;
+  return SCREEN_NAME[k] || k;
+}
+
 const SCREEN_NAME = { lib: "서재", book: "책 펼침", stage: "단계 구절표", p_read: "본문 · 읽기", p_hide: "본문 · 가리기", p_say: "본문 · 선포", p_rec: "본문 · 녹음 채점",
   x_prayer: "암송 기도문", x_slogans: "개념 구호", x_names: "하나님의 이름", x_testimony: "성벽 기도 간증", list: "회개 기도", tab: "성막 그림", settings: "설정", admin: "관리" };
 const SCREEN_SKIP = new Set(["admin"]);   // 개선 힌트에서 빼는 화면 (관리자만 여는 곳)
@@ -1911,7 +1950,7 @@ async function viewSettings() {
 const GROUPS0 = ["교사", "학부모", "학생", "성도", "기타"];
 const DAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const ALARM0 = () => ({ id: "a" + Date.now().toString(36), on: true, time: "07:00", days: [0, 1, 2, 3, 4, 5, 6], title: "말씀선포", body: "{이름}님, 오늘 말씀 선포 하셨나요?" });
-const ADM = { tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null,
+const ADM = { lg: { tab: "sess", days: 7, who: "", q: "" }, tab: "people", q: "", grp: "*", sort: "name", sel: new Set(), open: null, panel: null, data: null, loadedAt: 0, alarms: null,
   us: { days: 30, grp: "*", metric: "users", sort: "quiet", cache: {}, dcache: {}, err: false } };
 const tsMs = (t) => !t ? 0 : typeof t === "number" ? t : t.toMillis ? t.toMillis() : t.seconds ? t.seconds * 1000 : t instanceof Date ? t.getTime() : 0;
 function ago(t) {
@@ -1946,14 +1985,16 @@ async function viewAdmin(q = {}) {
   if (!S.admin) return go("#/");
   const rid = rendering;
   if (q.t) ADM.tab = q.t;
+  if (!S.super && (ADM.tab === "stats" || ADM.tab === "logs")) ADM.tab = "people";   // 2.4.5 — 사용 현황 · 로그는 수퍼 관리자만
   if (!ADM.data) $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/"), tome(`<p class="muted">불러오는 중…</p>`));
   const D = await admLoad();
   if (ADM.tab === "stats") await admUsage();
   if (ADM.tab === "audio") await admAudioLoad();
+  if (ADM.tab === "logs") await admLogsLoad();
   if (rid !== rendering) return;
   const tabs = [["people", `사람 <small>${D.rows.length}</small>`], ["req", `열람 요청${D.reqs.length ? ` <em class="badge">${D.reqs.length}</em>` : ""}`],
-    ["stats", "사용 현황"], ["alarm", "아침 알림"], ["audio", "음성"], ["content", "본문 올리기"]];
-  const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "audio" ? admAudio() : ADM.tab === "content" ? admContent() : admPeople(D);
+    ...(S.super ? [["stats", "사용 현황"], ["logs", "로그"]] : []), ["alarm", "아침 알림"], ["audio", "음성"], ["content", "본문 올리기"]];
+  const body = ADM.tab === "req" ? admReq(D) : ADM.tab === "stats" ? admStats(D) : ADM.tab === "logs" ? admLogs(D) : ADM.tab === "alarm" ? admAlarm(D) : ADM.tab === "audio" ? admAudio() : ADM.tab === "content" ? admContent() : admPeople(D);
   $app.innerHTML = deskPage(topBar("<b>관리</b>", "#/", `<button class="iconbtn" type="button" data-adm="reload" aria-label="새로 불러오기">${icon("refresh")}</button>`), tome(`
     <nav class="adm-tabs adm-top" role="tablist" aria-label="관리 메뉴">${tabs.map(([id, lb]) =>
       `<a class="adm-tab" role="tab" href="#/admin?t=${id}" data-nav aria-selected="${ADM.tab === id}">${lb}</a>`).join("")}</nav>
@@ -2081,7 +2122,7 @@ function admReq(D) {
 
 // ── 사용 현황 (2.4 — '목자의 삶'과 같은 방식) · 2.0부터 모인 접속 기록도 함께
 //  기간 안의 칸만 읽음 (기간 × 사람 수) · 한 번 읽으면 [새로 읽기] 전까지 다시 안 읽음
-const US_PERIOD = [[7, "7일"], [30, "30일"], [90, "90일"]];
+const US_PERIOD = [[7, "7일"], [30, "30일"], [90, "90일"], [180, "6개월"], [365, "1년"]];
 const nf = (n) => Number(n || 0).toLocaleString("ko-KR");
 const minTxt = (m) => !m ? "0분" : m < 60 ? `${Math.round(m)}분` : `${Math.floor(m / 60)}시간${Math.round(m % 60) ? ` ${Math.round(m % 60)}분` : ""}`;
 const dayMinus = (n) => B.kstDay(Date.now() - n * 86400e3);
@@ -2145,13 +2186,18 @@ function admStats(D) {
   // 날마다
   const metric = U.metric, mUnit = metric === "users" ? "명" : metric === "mins" ? "분" : "번";
   const val = (d) => metric === "users" ? byDay[d].users.size : metric === "mins" ? byDay[d].mins : byDay[d].opens;
-  const peak = Math.max(1, ...dayList.map(val)), W = 1000, H = 170, bw = W / dayList.length, step = days <= 7 ? 1 : days <= 30 ? 7 : 15;
-  const chart = `<svg class="us-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="날마다 ${mUnit}">
+  // 2.4.5 — 기간이 길면(120일 넘게) 한 주씩 묶어서 막대 하나
+  const bk = days > 120 ? 7 : 1, groups = [];
+  for (let g = 0; g < dayList.length; g += bk) groups.push(dayList.slice(g, g + bk));
+  const gval = (G) => metric === "users" ? new Set(G.flatMap((d) => [...byDay[d].users])).size : G.reduce((n, d) => n + val(d), 0);
+  const peak = Math.max(1, ...groups.map(gval)), W = 1000, H = 170, bw = W / groups.length;
+  const step = groups.length <= 7 ? 1 : groups.length <= 31 ? 7 : groups.length <= 92 ? 15 : 8;
+  const chart = `<svg class="us-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${bk > 1 ? "주마다" : "날마다"} ${mUnit}">
       ${[0.5, 1].map((f) => `<line x1="0" x2="${W}" y1="${H - 5 - f * 150}" y2="${H - 5 - f * 150}" class="gl"/>`).join("")}
-      ${dayList.map((d, i) => { const v = val(d), h = v ? Math.max(v / peak * 150, 3) : 0, wk = new Date(d + "T00:00Z").getUTCDay();
-        return `<rect x="${(i * bw + bw * 0.14).toFixed(1)}" y="${(H - 5 - h).toFixed(1)}" width="${(bw * 0.72).toFixed(1)}" height="${h.toFixed(1)}" class="${wk === 0 ? "sun" : ""}${d === today ? " now" : ""}"><title>${fmtDay(d)} · ${nf(v)}${mUnit}</title></rect>`; }).join("")}
+      ${groups.map((G, i) => { const d = G[0], v = gval(G), h = v ? Math.max(v / peak * 150, 3) : 0, wk = new Date(d + "T00:00Z").getUTCDay();
+        return `<rect x="${(i * bw + bw * 0.14).toFixed(1)}" y="${(H - 5 - h).toFixed(1)}" width="${(bw * 0.72).toFixed(1)}" height="${h.toFixed(1)}" class="${bk === 1 && wk === 0 ? "sun" : ""}${G.includes(today) ? " now" : ""}"><title>${fmtDay(d)}${bk > 1 ? " 주" : ""} · ${nf(v)}${mUnit}</title></rect>`; }).join("")}
     </svg>
-    <div class="us-x">${dayList.map((d, i) => (dayList.length - 1 - i) % step === 0 ? `<span style="left:${((i + 0.5) * bw / 10).toFixed(2)}%">${fmtDay(d)}</span>` : "").join("")}</div>`;
+    <div class="us-x">${groups.map((G, i) => (groups.length - 1 - i) % step === 0 ? `<span style="left:${((i + 0.5) * bw / 10).toFixed(2)}%">${fmtDay(G[0])}</span>` : "").join("")}</div>`;
 
   // 요일 × 시간 (사용 분)
   const HM = Array.from({ length: 7 }, () => Array(24).fill(0));
@@ -2225,7 +2271,7 @@ function admStats(D) {
     <div class="us-grid">
       <section class="us-card us-wide"><div class="us-h"><h3>날마다</h3>
           <div class="seg mini" role="group" aria-label="무엇을 볼까">${[["users", "사람 수"], ["mins", "사용 시간"], ["opens", "연 횟수"]].map(([k, l]) => `<button type="button" data-adm="usm" data-v="${k}" aria-pressed="${k === metric}">${l}</button>`).join("")}</div>
-          <span class="muted">최대 ${nf(peak)}${mUnit} · 진한 막대 = 주일</span></div>
+          <span class="muted">최대 ${nf(peak)}${mUnit} · ${bk > 1 ? "막대 하나 = 한 주" : "진한 막대 = 주일"}</span></div>
         <div class="us-chart">${chart}</div></section>
       <section class="us-card"><div class="us-h"><h3>언제 쓰나</h3><span class="muted">요일 × 시간 (사용 분)</span></div>${heat}</section>
       <section class="us-card"><div class="us-h"><h3>기기 · 환경</h3><span class="muted">사람마다 마지막 기록</span></div>
@@ -2258,7 +2304,7 @@ function admStats(D) {
           </tbody></table></div>` : `<p class="muted us-empty">${days}일 동안 기록된 오류가 없어요.</p>`}</section>
     </div>
     <div class="us-priv">${icon("lock")}<div><b>무엇을 모으나</b><p>화면 이름 · 누른 기능의 횟수 · 사용 분 · 시간대 · 기기 종류 · 브라우저 · 앱 버전 · 오류 종류 · 펼친 단계.
-      <b>본문에 남긴 형광펜 · 메모 글, 녹음, 위치는 모으지 않아요.</b> 이 화면은 관리자만 봅니다.</p></div></div>`;
+      <b>본문에 남긴 형광펜 · 메모 글, 녹음, 위치는 모으지 않아요.</b> 이 화면은 수퍼 관리자만 봅니다.</p></div></div>`;
 }
 function usCsv(D) {
   const U = ADM.us, X = usStats(D), q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -2270,6 +2316,118 @@ function usCsv(D) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `말씀선포_사용현황_${U.days}일_${B.kstDay()}.csv`;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
+
+// ── 로그 (2.4.5 · 수퍼 관리자만) — 접속 기록 · 관리 기록 · 오류 ('목자의 삶' 48단계 로그와 같은 짜임 + 본문 열람)
+const LG_DAYS = [[1, "오늘"], [7, "7일"], [30, "30일"], [90, "90일"], [180, "180일"]];
+async function admLogsLoad(force) {
+  const L = ADM.lg;
+  if (!force && L.key === L.days && L.sess) return;
+  const from = L.days === 1 ? Date.parse(B.kstDay() + "T00:00:00+09:00") : Date.now() - L.days * 86400e3;
+  await flushUsage();
+  const [ss, au, us] = await Promise.all([B.listSessions(from).catch(() => null), B.listAudit(from).catch(() => []), B.listUsage(L.days).catch(() => [])]);
+  L.sess = (ss || []).sort((a, b) => b.start - a.start); L.err = !ss;
+  L.audit = (au || []).sort((a, b) => (b.atMs || 0) - (a.atMs || 0)); L.usage = us || []; L.key = L.days;
+  // 180일 지난 접속 기록은 정리 (열 때 한 번, 300개씩)
+  if (!L.cleaned) { L.cleaned = true; B.cleanSessions(Date.now() - 180 * 86400e3).catch(() => {}); }
+}
+const tHM = (ms) => { const d = new Date(ms + 9 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+const tHm = (ms) => { const d = new Date(ms + 9 * 3600e3); return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+const durTx = (sec) => !sec ? "0초" : sec < 60 ? `${sec}초` : minTxt(Math.round(sec / 60));
+function lgPeople(D) {
+  const byE = {}; D.rows.forEach((r) => { byE[r.email] = r; });
+  const nm = (x) => { const r = byE[x.email || x.byEmail]; return (r && r.name) || x.name || x.byName || x.email || "—"; };
+  const grp = (x) => { const r = byE[x.email || x.byEmail]; return (r && r.group) || ""; };
+  return { nm, grp };
+}
+function lgRows(D) {
+  const L = ADM.lg, { nm } = lgPeople(D), q = (L.q || "").trim(), has = (t) => !q || String(t || "").toLowerCase().includes(q.toLowerCase());
+  if (L.tab === "audit") return (L.audit || []).filter((a) => (!L.who || a.by === L.who) && has([nm(a), a.action, a.target, a.detail].join(" ")));
+  return (L.sess || []).filter((x) => (!L.who || x.uid === L.who) && has([nm(x), x.device, x.ver, x.os, x.br, (x.flow || []).join(" ")].join(" ")));
+}
+function lgBody(D) {
+  const L = ADM.lg, { nm, grp } = lgPeople(D);
+  if (L.tab === "err") {
+    const errs = {}; (L.usage || []).filter((r) => !L.who || r.uid === L.who).forEach((r) => Object.entries(r.errs || {}).forEach(([k, v]) => {
+      const e = errs[k] = errs[k] || { n: 0, users: new Set(), last: "", vers: new Set() }; e.n += v; e.users.add(nm(r)); if (r.date > e.last) e.last = r.date; if (r.ver) e.vers.add(r.ver); }));
+    const q = (L.q || "").trim(), EL = Object.entries(errs).filter(([k]) => !q || k.includes(q)).sort((a, b) => b[1].n - a[1].n);
+    return `<section class="us-card us-wide"><div class="us-h"><h3>같은 오류끼리</h3><span class="muted">${EL.length}가지</span></div>
+      ${EL.length ? `<div class="st-wrap"><table class="st-t us-tbl"><thead><tr><th>화면</th><th>오류</th><th class="n">횟수</th><th>누구</th><th>마지막</th><th>버전</th></tr></thead><tbody>
+      ${EL.slice(0, 100).map(([k, e]) => { const [w, ...m] = k.split(" | "); return `<tr><td>${esc(SCREEN_NAME[w] || w)}</td><td class="t mono">${esc(m.join(" | "))}</td><td class="n">${nf(e.n)}</td>
+        <td class="t">${esc([...e.users].slice(0, 4).join(", "))}${e.users.size > 4 ? ` 외 ${e.users.size - 4}명` : ""}</td><td>${fmtDay(e.last)}</td><td class="t">${esc([...e.vers].sort().slice(-3).join(", "))}</td></tr>`; }).join("")}
+      </tbody></table></div>` : `<p class="muted us-empty">기록된 오류가 없어요.</p>`}</section>`;
+  }
+  const rows = lgRows(D);
+  if (L.tab === "audit") return `<section class="us-card us-wide"><div class="us-h"><h3>누가 무엇을 바꿨나</h3><span class="muted">${rows.length}건 · 최근 순</span></div>
+    <div class="lg-list">${rows.slice(0, 400).map((a) => `<div class="lg-r"><span class="lg-tm">${a.atMs ? tHM(a.atMs) : ""}</span><b>${esc(nm(a))}</b>
+      <span class="lg-act">${esc(a.action || "")}</span><span class="muted">${esc([a.target, a.detail].filter(Boolean).join(" · "))}</span></div>`).join("") || `<p class="muted us-empty">기록이 없어요. (2.4.5부터 쌓여요)</p>`}</div></section>`;
+  // 접속 기록
+  const by = {}, pas = {}, hours = Array(24).fill(0);
+  rows.forEach((x) => {
+    const p = by[x.uid] = by[x.uid] || { uid: x.uid, x, n: 0, dur: 0, last: 0, first: Infinity, pas: new Set() };
+    p.n++; p.dur += x.dur || 0; if (x.start > p.last) { p.last = x.start; p.x = x; } if (x.start < p.first) p.first = x.start;
+    hours[new Date(x.start + 9 * 3600e3).getUTCHours()]++;
+    (x.flow || []).forEach((f) => { const m = f.match(/^(\d권 \d+단계 · [^·]+?) · /); if (m) { pas[m[1]] = pas[m[1]] || { n: 0, who: new Set() }; pas[m[1]].n++; pas[m[1]].who.add(x.uid); p.pas.add(m[1]); } });
+  });
+  const P = Object.values(by).sort((a, b) => b.last - a.last), tot = rows.reduce((n, x) => n + (x.dur || 0), 0);
+  const today0 = Date.parse(B.kstDay() + "T00:00:00+09:00"), todayN = rows.filter((x) => x.start >= today0).length;
+  const PA = Object.entries(pas).sort((a, b) => b[1].n - a[1].n).slice(0, 15), paTop = PA.length ? PA[0][1].n : 1;
+  const hPeak = Math.max(1, ...hours);
+  const T = (k, v, sub) => `<div class="tile"><small>${k}</small><b>${v}</b><span>${sub}</span></div>`;
+  return `<div class="tiles us-tiles">
+      ${T("접속", nf(rows.length), `번 · ${P.length}명`)}
+      ${T("오늘 접속", nf(todayN), "번")}
+      ${T("한 번 평균", durTx(rows.length ? Math.round(tot / rows.length) : 0), "머문 시간")}
+      ${T("모두 머문 시간", durTx(tot), "기간 합계")}
+    </div>
+    <div class="us-grid">
+      <section class="us-card"><div class="us-h"><h3>들어오는 시각</h3><span class="muted">접속 수 · 한국 시간</span></div>
+        <div class="lg-hours">${hours.map((v, h) => `<i style="--h:${(v / hPeak * 100).toFixed(0)}%" title="${h}시 · ${v}번"></i>`).join("")}</div>
+        <div class="lg-hx"><span>0시</span><span>6시</span><span>12시</span><span>18시</span><span>24시</span></div></section>
+      <section class="us-card"><div class="us-h"><h3>많이 연 본문</h3><span class="muted">접속 안에서 연 횟수</span></div>
+        ${PA.length ? `<div class="us-hb">${PA.map(([k, v]) => `<div class="hb"><span class="who" title="${esc(k)}">${esc(k)}</span><span class="track"><i style="width:${Math.max(2, Math.round(v.n / paTop * 100))}%"></i></span><span class="n">${v.n}<small> · ${v.who.size}명</small></span></div>`).join("")}</div>` : `<p class="muted us-empty">아직 없어요.</p>`}</section>
+      <section class="us-card us-wide"><div class="us-h"><h3>사람별</h3><span class="muted">${P.length}명</span></div>
+        <div class="st-wrap"><table class="st-t us-tbl"><thead><tr><th>이름</th><th>마지막 접속</th><th class="n">접속</th><th class="n">모두 머문 시간</th><th class="n">한 번 평균</th><th class="n">연 본문</th><th>기기 · 버전</th></tr></thead><tbody>
+        ${P.map((p) => `<tr><td><span class="nm">${esc(nm(p.x))}${grp(p.x) ? `<small>${esc(grp(p.x))}</small>` : ""}</span></td><td>${tHM(p.last)}</td><td class="n">${p.n}번</td><td class="n">${durTx(p.dur)}</td>
+          <td class="n">${durTx(Math.round(p.dur / p.n))}</td><td class="n">${p.pas.size}</td>
+          <td class="t">${esc(p.x.device || "")}${p.x.pwa ? ` <span class="tag">앱</span>` : ""}${p.x.ver ? ` <span class="tag ${p.x.ver === VERSION ? "" : "old"}">${esc(p.x.ver)}</span>` : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="muted">기록이 없어요.</td></tr>`}
+        </tbody></table></div></section>
+      <section class="us-card us-wide"><div class="us-h"><h3>접속마다</h3><span class="muted">${rows.length}번 · 최근 순${rows.length > 300 ? " · 300번까지 보여요 (CSV에는 모두)" : ""}</span></div>
+        <div class="lg-list">${rows.slice(0, 300).map((x) => `<div class="lg-r"><span class="lg-tm">${tHM(x.start)} ~ ${tHm(x.end || x.start)}</span>
+          <b>${esc(nm(x))}</b><span class="chip">${durTx(x.dur || 0)}</span><span class="muted">${esc([x.device, x.os, x.br].filter(Boolean).join(" · "))}${x.pwa ? " · 앱" : ""}${x.ver ? " · v" + esc(x.ver) : ""}</span>
+          <p class="lg-flow">${(x.flow || []).map((f) => `<span class="${/^[✓●✎]/.test(f) ? "ev" : ""}">${esc(f)}</span>`).join("<i>→</i>") || "—"}</p></div>`).join("") || `<p class="muted us-empty">기록이 없어요. (2.4.5부터 쌓여요)</p>`}</div></section>
+    </div>`;
+}
+function admLogs(D) {
+  const L = ADM.lg, { nm } = lgPeople(D);
+  const src = L.tab === "audit" ? (L.audit || []).map((a) => [a.by, nm(a)]) : (L.tab === "err" ? (L.usage || []) : (L.sess || [])).map((x) => [x.uid, nm(x)]);
+  const people = [...new Map(src).entries()].sort((a, b) => String(a[1]).localeCompare(String(b[1]), "ko"));
+  return `<div class="us-bar">
+      <div class="seg" role="group" aria-label="무엇을 볼까">${[["sess", "접속 기록"], ["audit", "관리 기록"], ["err", "오류"]].map(([k, l]) => `<button type="button" data-adm="lgt" data-v="${k}" aria-pressed="${L.tab === k}">${l}</button>`).join("")}</div>
+      <div class="seg" role="group" aria-label="기간">${LG_DAYS.map(([d, l]) => `<button type="button" data-adm="lgd" data-v="${d}" aria-pressed="${L.days === d}">${l}</button>`).join("")}</div>
+      <span class="sp"></span>
+      <button class="btn ghost small" type="button" data-adm="lgreload">${icon("refresh")}새로 읽기</button>
+      <button class="btn ghost small" type="button" data-adm="lgcsv">CSV 내려받기</button>
+    </div>
+    <div class="lg-filter"><select id="lgWho" aria-label="사람"><option value="">모든 사람</option>${people.map(([u, n]) => `<option value="${esc(u)}" ${L.who === u ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+      <input type="search" id="lgQ" value="${esc(L.q || "")}" placeholder="찾기 — 이름 · 본문 주소 · 화면 · 기기" autocomplete="off"></div>
+    ${L.err ? `<div class="ok-box warn"><b>접속 기록을 읽지 못했어요</b>보안 규칙 2.4.5(amsong_sessions)가 게시됐는지 확인해 주세요.</div>` : ""}
+    <div id="lgBody">${lgBody(D)}</div>
+    <div class="us-priv">${icon("lock")}<div><b>무엇을 남기나</b><p>들어온 · 나간 시각, 머문 시간, 기기 · 브라우저 · 앱 버전, 본 화면 순서(몇 권 몇 단계 어느 본문을 어떤 방식으로), 외웠어요 · 녹음 채점 저장 같은 누른 기능 이름, 관리자가 바꾼 것.
+      <b>형광펜 · 메모 글, 녹음, 위치는 남기지 않아요.</b> 접속 기록은 180일이 지나면 저절로 지워져요. 이 화면은 수퍼 관리자만 봅니다.</p></div></div>`;
+}
+function lgCsv(D) {
+  const L = ADM.lg, { nm, grp } = lgPeople(D), q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`, when = (ms) => ms ? new Date(ms).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "";
+  let rows;
+  if (L.tab === "audit") rows = [["시각", "누가", "무엇을", "대상", "자세히"], ...lgRows(D).map((a) => [when(a.atMs), nm(a), a.action, a.target, a.detail])];
+  else if (L.tab === "err") { const e = {}; (L.usage || []).forEach((r) => Object.entries(r.errs || {}).forEach(([k, v]) => { e[k] = (e[k] || 0) + v; })); rows = [["오류", "횟수"], ...Object.entries(e)]; }
+  else rows = [["이름", "분류", "들어온 시각", "나간 시각", "머문 초", "기기", "운영체제", "브라우저", "앱", "버전", "본 화면 순서"],
+    ...lgRows(D).map((x) => [nm(x), grp(x), when(x.start), when(x.end), x.dur || 0, x.device, x.os, x.br, x.pwa ? "앱" : "", x.ver, (x.flow || []).join(" > ")])];
+  const blob = new Blob(["\ufeff" + rows.map((r) => r.map(q).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `말씀선포_로그_${{ sess: "접속기록", audit: "관리기록", err: "오류" }[L.tab]}_${L.days}일_${B.kstDay()}.csv`;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+// 관리자가 바꾼 것 남기기 (로그 → 관리 기록) — 못 남겨도 하던 일은 그대로
+const audit = (action, target = "", detail = "") => { if (S.user && S.admin) B.addAudit(S.user, (S.allow && S.allow.name) || S.user.name || "", { action, target, detail }).catch(() => {}); };
 
 // ── 아침 알림
 function admAlarm(D) {
@@ -2355,6 +2513,9 @@ function admWire(D) {
   const $ = (id) => document.getElementById(id);
   const q = $("admQ");
   if (q) q.addEventListener("input", () => { ADM.q = q.value; $("ppList").innerHTML = admPeopleList(D); });
+  const lw = $("lgWho"), lq = $("lgQ");
+  if (lw) lw.addEventListener("change", () => { ADM.lg.who = lw.value; $("lgBody").innerHTML = lgBody(D); });
+  if (lq) lq.addEventListener("input", () => { ADM.lg.q = lq.value; $("lgBody").innerHTML = lgBody(D); });
   const us = $("usSort");
   if (us) us.addEventListener("change", () => { ADM.us.sort = us.value; viewAdmin(); });
   const so = $("admSort");
@@ -2370,6 +2531,7 @@ function admWire(D) {
     if (!email) return;
     const ex = D.rows.find((r) => r.email === email);
     try { await B.setAllow(email, { vols: checkedVols(f, "v_new"), name: f.name.value, group: f.group.value, sub: f.sub.value, ...(ex ? {} : { role: "user" }) }, !ex);
+      audit(ex ? "사람 정보 고침" : "사람 등록", `${f.name.value || ""} (${email})`, `책 ${checkedVols(f, "v_new").join("·") || "없음"}${f.group.value ? " · " + f.group.value : ""}`);
       toast(ex ? "이미 있던 사람이라 정보를 고쳤어요" : "등록했어요"); ADM.panel = null; await admLoad(true); viewAdmin(); }
     catch (err) { toast("등록하지 못했어요"); }
   });
@@ -2385,7 +2547,7 @@ function admWire(D) {
       const list = r.list.map((x) => { const ex = D.rows.find((y) => y.email === x.email);
         return ex ? { email: x.email, exists: true, ...(x.name ? { name: x.name } : {}), ...(x.group ? { group: x.group } : {}), ...(x.sub ? { sub: x.sub } : {}) }
           : { email: x.email, name: x.name, group: x.group, sub: x.sub, vols, role: "user" }; });
-      try { msg.textContent = "등록하는 중…"; await B.setAllowMany(list, true); toast(`${list.length}명 등록했어요`); ADM.panel = null; await admLoad(true); viewAdmin(); }
+      try { msg.textContent = "등록하는 중…"; await B.setAllowMany(list, true); audit("여러 명 등록", `${list.length}명`, list.slice(0, 8).map((x) => x.name || x.email).join(", ")); toast(`${list.length}명 등록했어요`); ADM.panel = null; await admLoad(true); viewAdmin(); }
       catch (err) { msg.textContent = "등록하지 못했어요: " + (err.message || err); }
     });
   }
@@ -2393,7 +2555,7 @@ function admWire(D) {
   if (gf) gf.addEventListener("submit", async (e) => {
     e.preventDefault();
     const groups = [...new Set(gf.groups.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean))].slice(0, 30);
-    try { await B.setConfig("admin", { groups }); D.groups = groups.length ? groups : GROUPS0; ADM.panel = null; toast("분류 이름을 저장했어요"); viewAdmin(); }
+    try { await B.setConfig("admin", { groups }); audit("분류 이름 저장", groups.join(", ")); D.groups = groups.length ? groups : GROUPS0; ADM.panel = null; toast("분류 이름을 저장했어요"); viewAdmin(); }
     catch (err) { toast("저장하지 못했어요"); }
   });
   const pe = $("ppEdit");
@@ -2401,7 +2563,7 @@ function admWire(D) {
     e.preventDefault();
     const email = pe.dataset.email, d = { name: pe.name.value, group: pe.group.value, sub: pe.sub.value, memo: pe.memo.value, role: pe.role.value, vols: checkedVols(pe, "ev") };
     if (email === S.user.email && d.role !== "admin" && S.allow && S.allow.role === "admin" && !confirm("내 계정을 '열람'으로 바꾸면 관리 화면을 못 쓸 수 있어요. 바꿀까요?")) return;
-    try { await B.setAllow(email, d); Object.assign(D.rows.find((r) => r.email === email), d); ADM.open = null; toast("저장했어요"); viewAdmin(); }
+    try { await B.setAllow(email, d); audit("사람 정보 고침", `${d.name || ""} (${email})`, `${d.role === "admin" ? "관리자" : "열람"} · 책 ${d.vols.join("·") || "없음"}${d.group ? " · " + d.group : ""}`); Object.assign(D.rows.find((r) => r.email === email), d); ADM.open = null; toast("저장했어요"); viewAdmin(); }
     catch (err) { toast("저장하지 못했어요"); }
   });
   const al = $("alarmList");
@@ -2417,7 +2579,7 @@ function admWire(D) {
     e.preventDefault();
     const k = vf.vapid.value.trim().replace(/\s+/g, "");
     if (k && !/^[A-Za-z0-9_-]{60,120}$/.test(k)) return toast("키 모양이 달라요. 'B'로 시작하는 긴 글자를 그대로 붙여 넣어 주세요");
-    try { await B.setConfig("push", { vapidKey: k }); D.push.vapidKey = k; toast("웹 푸시 키를 저장했어요"); viewAdmin(); } catch (err) { toast("저장하지 못했어요"); }
+    try { await B.setConfig("push", { vapidKey: k }); audit("웹 푸시 키 저장"); D.push.vapidKey = k; toast("웹 푸시 키를 저장했어요"); viewAdmin(); } catch (err) { toast("저장하지 못했어요"); }
   });
   const cf = $("contentFile");
   if (cf) cf.addEventListener("change", async (e) => {
@@ -2427,7 +2589,7 @@ function admWire(D) {
       const json = JSON.parse(await file.text());
       msg.textContent = "올리는 중…";
       const n = await B.uploadContent(json, (d, t) => { msg.textContent = `올리는 중… ${d} / ${t}`; });
-      S.books = {}; S.stages = {};
+      S.books = {}; S.stages = {}; audit("본문 올리기", file.name, `${n}개 문서`);
       msg.textContent = `다 올렸어요 (${n}개 문서). 서재에서 확인해 보세요.`;
     } catch (err) { msg.textContent = "올리지 못했어요: " + (err.message || err); }
   });
@@ -2450,7 +2612,7 @@ async function admClick(t) {
     case "ppdel": {
       if (email === S.user.email) return toast("내 계정은 지울 수 없어요");
       if (!confirm(`${email} 을(를) 지울까요? 더 이상 책을 볼 수 없어요.`)) return;
-      try { await B.deleteAllow(email); D.rows = D.rows.filter((r) => r.email !== email); ADM.sel.delete(email); ADM.open = null; toast("지웠어요"); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      try { await B.deleteAllow(email); audit("사람 삭제", email); D.rows = D.rows.filter((r) => r.email !== email); ADM.sel.delete(email); ADM.open = null; toast("지웠어요"); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
       break;
     }
     case "csv": csvDownload(D); break;
@@ -2460,26 +2622,26 @@ async function admClick(t) {
       const g = document.getElementById("selGroup").value.trim(), vols = checkedVols(document.getElementById("selBar"), "v_sel");
       const d = act === "selgroup" ? { group: g } : { vols };
       if (act === "selgroup" && !g && !confirm("분류를 비울까요?")) return;
-      try { await B.setAllowMany(emails.map((e) => ({ email: e, ...d }))); D.rows.forEach((r) => { if (ADM.sel.has(r.email)) Object.assign(r, d); });
+      try { await B.setAllowMany(emails.map((e) => ({ email: e, ...d }))); audit(act === "selgroup" ? "분류 바꿈" : "볼 수 있는 책 바꿈", `${emails.length}명`, act === "selgroup" ? g || "(비움)" : vols.join("·") || "없음"); D.rows.forEach((r) => { if (ADM.sel.has(r.email)) Object.assign(r, d); });
         toast(`${emails.length}명의 ${act === "selgroup" ? "분류" : "볼 수 있는 책"}를 바꿨어요`); viewAdmin(); } catch (e) { toast("바꾸지 못했어요"); }
       break;
     }
     case "seldel": {
       const emails = [...ADM.sel].filter((e) => e !== S.user.email); if (!emails.length) return toast("내 계정은 지울 수 없어요");
       if (!confirm(`고른 ${emails.length}명을 지울까요? 더 이상 책을 볼 수 없어요.`)) return;
-      try { await B.deleteAllowMany(emails); D.rows = D.rows.filter((r) => !emails.includes(r.email)); ADM.sel.clear(); toast(`${emails.length}명을 지웠어요`); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      try { await B.deleteAllowMany(emails); audit("여러 명 삭제", `${emails.length}명`, emails.slice(0, 8).join(", ")); D.rows = D.rows.filter((r) => !emails.includes(r.email)); ADM.sel.clear(); toast(`${emails.length}명을 지웠어요`); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
       break;
     }
     case "reqok": case "reqall": {
       const forms = act === "reqall" ? [...document.querySelectorAll("form.rq")] : [t.closest("form.rq")];
       if (act === "reqall" && !confirm(`${forms.length}명의 요청을 모두 허용할까요? (각 줄에 적은 분류 · 책으로)`)) return;
       const list = forms.map((f) => ({ email: f.dataset.email, name: f.name.value, group: f.group.value, sub: f.sub.value, vols: checkedVols(f, "rv"), role: "user" }));
-      try { await B.approveRequests(list); toast(`${list.length}명을 허용했어요`); await admLoad(true); viewAdmin(); } catch (e) { toast("허용하지 못했어요"); }
+      try { await B.approveRequests(list); audit("열람 요청 허용", `${list.length}명`, list.slice(0, 8).map((x) => x.name || x.email).join(", ")); toast(`${list.length}명을 허용했어요`); await admLoad(true); viewAdmin(); } catch (e) { toast("허용하지 못했어요"); }
       break;
     }
     case "reqno": {
       if (!confirm(`${email} 의 요청을 거절(지우기)할까요?`)) return;
-      try { await B.deleteRequest(email); D.reqs = D.reqs.filter((r) => r.email !== email); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
+      try { await B.deleteRequest(email); audit("열람 요청 거절", email); D.reqs = D.reqs.filter((r) => r.email !== email); viewAdmin(); } catch (e) { toast("지우지 못했어요"); }
       break;
     }
     case "alday": case "alevery": case "alweek": {
@@ -2494,7 +2656,7 @@ async function admClick(t) {
       const bad = ADM.alarms.find((a) => !/^\d{2}:\d{2}$/.test(a.time || "") || !(a.days || []).length || !(a.body || "").trim());
       if (bad) return toast("시각 · 요일 · 문구를 모두 정해 주세요");
       const alarms = ADM.alarms.map((a) => ({ id: a.id, on: a.on !== false, time: a.time, days: a.days, title: (a.title || "말씀선포").trim(), body: a.body.trim() }));
-      try { await B.setConfig("push", { alarms }); D.push.alarms = alarms; toast("알림을 저장했어요"); } catch (e) { toast("저장하지 못했어요"); }
+      try { await B.setConfig("push", { alarms }); audit("아침 알림 저장", alarms.map((a) => a.time).join(", ")); D.push.alarms = alarms; toast("알림을 저장했어요"); } catch (e) { toast("저장하지 못했어요"); }
       break;
     }
     case "alpreview": {
@@ -2508,8 +2670,12 @@ async function admClick(t) {
       break;
     }
     case "aureload": await admAudioLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
+    case "lgt": ADM.lg.tab = t.dataset.v; ADM.lg.who = ""; viewAdmin(); break;
+    case "lgd": ADM.lg.days = Number(t.dataset.v) || 7; await admLogsLoad(true); viewAdmin(); break;
+    case "lgreload": await admLogsLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
+    case "lgcsv": lgCsv(D); break;
     case "auvoice": {
-      try { await B.setConfig("audio", { voice: t.dataset.v }); AU.cfg = { ...(AU.cfg || {}), voice: t.dataset.v }; toast("이 목소리로 정했어요"); viewAdmin(); }
+      try { await B.setConfig("audio", { voice: t.dataset.v }); audit("목소리 정함", t.dataset.v); AU.cfg = { ...(AU.cfg || {}), voice: t.dataset.v }; toast("이 목소리로 정했어요"); viewAdmin(); }
       catch (e) { toast("저장하지 못했어요"); }
       break;
     }
@@ -2768,13 +2934,14 @@ async function render() {
 // ───────── 시작
 async function boot(user) {
   Object.keys(NOTES).forEach((k) => delete NOTES[k]);
-  S.user = user; S.allow = null; S.admin = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
+  S.user = user; S.allow = null; S.admin = false; S.super = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
   S.myReq = undefined; S.reqEdit = false; S.pushCfg = undefined; S.myPush = undefined; ADM.data = null; ADM.alarms = null; ADM.sel.clear();
   if (!user) return render();
   // 열람 허용과 내 기록을 한꺼번에 받아 시작을 빠르게
   const udoc = B.getUserDoc(user.uid).catch(() => null);
   S.allow = await B.getAllow(user.email);
   if (!S.allow || S.allow.role === "admin") S.admin = await B.isAdmin();
+  if (S.admin) S.super = await B.isSuper();   // 2.4.5 — 사용 현황 · 로그는 수퍼 관리자만
   if (!S.allow && S.admin) {
     // 최고 관리자: 처음 들어오면 내 허용 정보를 자동으로 만듦
     await B.setAllow(user.email, { vols: VOLS, role: "admin", name: user.name }).catch(() => {});

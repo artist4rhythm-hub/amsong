@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.5.2";
+const VERSION = "2.6.0";
 const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -1786,12 +1786,30 @@ const plAudio = () => {
   a.addEventListener("play", () => { PL.playing = true; if (PL.state !== "gap") PL.state = "play"; plDraw(); });
   return a;
 };
+// 목소리 여러 개 (2.6): 관리에서 앱에 내놓은 목소리 중 세 권 다 만든 것(ready)만 고를 수 있음 · 기기마다 기억
+const VOICE_LABEL = { Sulafat: "따뜻한 여성", Gacrux: "차분한 여성", Kore: "또렷한 여성", Aoede: "밝은 여성", Leda: "젊은 여성",
+  Charon: "차분한 남성", Iapetus: "맑은 남성", Schedar: "고른 남성", Orus: "단단한 남성", Achird: "다정한 남성" };
+const vShort = (v) => String(v || "").split("-").pop();
+const vLabel = (sh) => VOICE_LABEL[sh] || sh;
+const plSfx = (sh) => sh === "Gacrux" ? "" : "@" + sh;
+async function plCfg(force) {
+  if (S.audioCfg === undefined || force) { try { S.audioCfg = await B.getConfig("audio"); } catch (e) { S.audioCfg = null; } }
+  return S.audioCfg;
+}
+function plVoices() {
+  const c = S.audioCfg || {}, cdef = vShort(c.voice) || "Gacrux";
+  const ready = c.ready && c.ready.length ? c.ready : [cdef];
+  const def = ready.includes(cdef) ? cdef : ready[0];
+  const list = [def, ...(c.voices || []).map(vShort)].filter((x, i, a) => x && a.indexOf(x) === i && ready.includes(x));
+  return { def, list: list.length ? list : [def] };
+}
+function plVoiceNow() { const { def, list } = plVoices(), v = pref("plVoice", ""); return list.includes(v) ? v : def; }
 const plB64 = (b64) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return URL.createObjectURL(new Blob([u], { type: "audio/mpeg" })); };
-async function plUrl(vol, pid, i) {
-  const sig = PL.idx && PL.idx.pid === pid ? PL.idx.sig : "";
-  const k = pid + "_" + i + "_" + sig;
+async function plUrl(vol, key, i) {
+  const sig = PL.idx && PL.key === key ? PL.idx.sig : "";
+  const k = key + "_" + i + "_" + sig;
   if (PL.urls.has(k)) return PL.urls.get(k);
-  const d = await B.getAudioPart(vol, pid, i, sig);
+  const d = await B.getAudioPart(vol, key, i, sig);
   if (!d || !d.b64) return null;
   const u = plB64(d.b64);
   PL.urls.set(k, u);
@@ -1808,9 +1826,14 @@ async function plLoad(c, from = 0, autoplay = true) {
   plAudio().pause();
   Object.assign(PL, { vol: String(c.vol), num: c.num, pid: c.p.id, ref: c.p.ref, label: c.st.label, mode: c.mode, idx: null, i: from, state: "load" });
   plDraw();
-  let idx = null;
-  try { idx = await B.getAudioIndex(PL.vol, PL.pid); } catch (e) {}
+  await plCfg();
   if (my !== PL.token) return;
+  let idx = null, voice = plVoiceNow();
+  try { idx = await B.getAudioIndex(PL.vol, PL.pid + plSfx(voice)); } catch (e) {}
+  const def = plVoices().def;
+  if ((!idx || !idx.count) && voice !== def) { voice = def; try { idx = await B.getAudioIndex(PL.vol, PL.pid + plSfx(def)); } catch (e) {} }   // 그 목소리가 아직 없으면 기본 목소리로
+  if (my !== PL.token) return;
+  PL.voice = voice; PL.key = PL.pid + plSfx(voice);
   if (!idx || !idx.count) { PL.state = "none"; PL.playing = false; plDraw(); return; }
   PL.idx = idx;
   PL.i = Math.min(from, idx.count - 1);
@@ -1823,7 +1846,7 @@ async function plPlay() {
   if (!PL.idx) return;
   PL.state = "load"; plDraw();
   let u = null;
-  try { u = await plUrl(PL.vol, PL.pid, PL.i); } catch (e) {}
+  try { u = await plUrl(PL.vol, PL.key, PL.i); } catch (e) {}
   if (my !== PL.token) return;
   if (!u) { PL.state = "err"; PL.playing = false; plDraw(); return; }
   if (a.src !== u) a.src = u;
@@ -1832,7 +1855,7 @@ async function plPlay() {
   catch (e) { PL.state = "pause"; PL.playing = false; }
   plDraw(); plMark();
   // 다음 조각 미리 받아 두기
-  if (PL.i + 1 < plCount()) plUrl(PL.vol, PL.pid, PL.i + 1).catch(() => {});
+  if (PL.i + 1 < plCount()) plUrl(PL.vol, PL.key, PL.i + 1).catch(() => {});
 }
 function plPause() { clearTimeout(PL.gapT); plAudio().pause(); PL.playing = false; PL.state = "pause"; plDraw(); }
 function plGo(i) {
@@ -1929,7 +1952,9 @@ function plDraw() {
       <button class="pl-ic" type="button" data-pl="expand" aria-label="듣기 막대 펼치기">${icon("chevu")}</button>`;
     return;
   }
-  const chip = (k, ic, label, on) => `<button class="pl-chip" type="button" data-pl="${k}" aria-pressed="${on}" title="${label}">${icon(ic)}<span>${label}</span></button>`;
+  const chip = (k, ic, label, short, on) => `<button class="pl-chip" type="button" data-pl="${k}" aria-pressed="${on}" title="${label}" aria-label="${label}">${icon(ic)}<span class="lg">${label}</span><span class="sh">${short}</span></button>`;
+  const V = plVoices(), vnow = PL.voice || plVoiceNow();
+  const vsel = V.list.length > 1 ? `<label class="pl-chip pl-vsel" title="목소리">${icon("head")}<select data-plv aria-label="목소리">${V.list.map((x) => `<option value="${x}" ${x === vnow ? "selected" : ""}>${vLabel(x)}</option>`).join("")}</select></label>` : "";
   bar.innerHTML = `<div class="pl-prog"><i style="width:${n ? ((PL.i / n) * 100).toFixed(1) : 0}%"></i></div>
     <div class="pl-l1">${playBtn}
       <div class="pl-meta"><b>${what}</b><span>${ref}${n ? ` · ${PL.i} / ${nv}` : ""}</span></div>
@@ -1937,7 +1962,7 @@ function plDraw() {
       <button class="pl-ic" type="button" data-pl="next" aria-label="다음 절" ${!n || PL.i >= n - 1 ? "disabled" : ""}>${icon("skip")}</button>
       <button class="pl-ic" type="button" data-pl="mini" aria-label="작게 접기">${icon("chevd")}</button>
       <button class="pl-ic" type="button" data-pl="close" aria-label="듣기 닫기">${icon("close")}</button></div>
-    <div class="pl-chips">${chip("rep", "rep1", "한 절 반복", PL.rep)}${chip("follow", "mic", "따라 하기", PL.follow)}${chip("cont", "list", "이어 듣기", PL.cont)}
+    <div class="pl-chips">${chip("rep", "rep1", "한 절 반복", "반복", PL.rep)}${chip("follow", "mic", "따라 하기", "따라", PL.follow)}${chip("cont", "list", "이어 듣기", "이어", PL.cont)}${vsel}
       <button class="pl-chip rate" type="button" data-pl="rate" aria-label="빠르기 ${PL.rate}배">${PL.rate.toFixed(1)}×</button></div>`;
   plProg();
 }
@@ -1994,6 +2019,15 @@ document.addEventListener("click", (e) => {
     if (box && ln && box.dataset.pid === PL.pid) plGo(Number(ln.dataset.u.split("-")[0]) + 1);
   }
 }, true);
+// 목소리 바꾸기: 지금 듣던 절부터 새 목소리로
+document.addEventListener("change", (e) => {
+  const sel = e.target.closest && e.target.closest("[data-plv]");
+  if (!sel) return;
+  setPref("plVoice", sel.value);
+  const st = S.stages[PL.vol + "_" + PL.num], p = st && st.passages.find((x) => x.id === PL.pid);
+  if (p) plLoad({ vol: PL.vol, num: PL.num, p, st, mode: PL.mode }, PL.i, PL.playing || PL.state === "load" || PL.state === "gap");
+  toast(vLabel(sel.value) + " 목소리로 들어요");
+});
 const plBtn = () => `<button class="pl-open" type="button" data-pl="toggle" aria-pressed="${PL.open}" aria-label="듣기">${icon("head")}<span>듣기</span></button>`;
 
 // ───────── 녹음 · 채점
@@ -2170,6 +2204,8 @@ async function viewSettings() {
   const theme = pref("theme", "cream"), size = sizeNow(), mode = pref("mode", "read");
   const E = envInfo(), P = S.pushCfg || {}, on = pushOnHere(), at = alarmTxt(P);
   const devs = Object.entries((S.myPush && S.myPush.devices) || {});
+  await plCfg();
+  const VV = plVoices(), VN = plVoiceNow();
   // 2.5 — 묶음 카드 · 한 줄 고르기 · 켜고 끄기는 스위치
   const card = (ic, title, body, right = "") => `<section class="set-card"><div class="cb-h">${icon(ic)}<b>${title}</b>${right ? `<em>${right}</em>` : ""}</div>${body}</section>`;
   const seg = (name, cur, list, label) => `<div class="seg" role="group" aria-label="${label}">${list.map(([val, lb]) => `<button type="button" data-pref="${name}" data-val="${val}" aria-pressed="${val === cur}">${lb}</button>`).join("")}</div>`;
@@ -2191,7 +2227,8 @@ async function viewSettings() {
       <p class="muted">기기마다 따로 기억해요 · 위쪽 반달 단추로도 바로 바꿀 수 있어요.</p>`, esc((THEMES.find((t) => t.id === theme) || {}).desc || ""))}
     ${card("type", "본문 글자 크기", `<div class="seg fs-seg" role="group" aria-label="본문 글자 크기">${SIZES.map(([v]) => `<button type="button" data-pref="size" data-val="${v}" aria-pressed="${v === size}" aria-label="${SIZE_SHORT[v] || v}"><span style="font-size:${Math.round(20 * Number(v))}px">가</span></button>`).join("")}</div>
       <div class="size-demo paperink"><span class="ln">태초에 하나님이 천지를 창조하시니라</span></div>`, `${SIZE_SHORT[size] || ""} · 기기마다 따로`)}
-    ${card("head", "듣기", `${row("gauge", "기본 빠르기", seg("plRate", String(Number(pref("plRate", "1")) || 1), [["0.8", "0.8"], ["1", "1.0"], ["1.2", "1.2"]], "기본 빠르기"))}
+    ${card("head", "듣기", `${VV.list.length > 1 ? `<div class="set-sub">목소리</div><div class="vo-grid" role="group" aria-label="목소리">${VV.list.map((x) => `<button type="button" data-pref="plVoice" data-val="${x}" aria-pressed="${x === VN}">${icon("head")}<span>${vLabel(x)}</span></button>`).join("")}</div>` : ""}
+      ${row("gauge", "기본 빠르기", seg("plRate", String(Number(pref("plRate", "1")) || 1), [["0.8", "0.8"], ["1", "1.0"], ["1.2", "1.2"]], "기본 빠르기"))}
       ${row("mic", "따라 하기 쉼", seg("plGap", pref("plGap", "1"), PL_GAPS, "따라 하기 쉼"))}
       ${row("list", "다음 본문 이어 듣기", tgb("plCont", pref("plCont", "1") === "1", "1", "0", "다음 본문 이어 듣기"))}`, "본문 화면 위쪽 [듣기]")}
     ${card("sliders", "보기", `${row("star", "별빛 배경", tgb("stars", pref("stars", "on") !== "off", "on", "off", "별빛 배경"))}
@@ -2749,31 +2786,42 @@ async function admAudioLoad(force) {
   const safe = (p, d) => p.catch(() => d);
   [AU.samples, AU.cfg, AU.log, AU.vols] = await Promise.all([safe(B.listAudioSamples(), []), safe(B.getConfig("audio"), null), safe(B.getConfig("ttsLog"), null),
     Promise.all(VOLS.map((v) => safe(B.getAudioVol(v), null)))]);
+  const bs = await Promise.all(VOLS.map((v) => book(v).catch(() => null)));
+  AU.total = bs.reduce((a, b) => a + ((b && b.stages) || []).reduce((x, st) => x + (st.count || 0), 0), 0);
 }
 function admAudio() {
   const list = (AU.samples || []).slice().sort((a, b) => (a.gender || "").localeCompare(b.gender || "") || (a.short || "").localeCompare(b.short || ""));
-  const chosen = AU.cfg && AU.cfg.voice, L = (AU.log && AU.log.last) || null;
+  const cfg = AU.cfg || {}, def = vShort(cfg.voice), L = (AU.log && AU.log.last) || null;
+  const offered = [...new Set([def, ...(cfg.voices || []).map(vShort)].filter(Boolean))], ready = cfg.ready || (def ? [def] : []);
+  const vols = AU.vols || [], total = AU.total || 0;
+  const builtOf = (sh) => vols.reduce((a, v) => a + ((v && v.voices && v.voices[sh] && v.voices[sh].passages) || (sh === "Gacrux" && v && !v.voices && v.passages) || 0), 0);
+  const bytesOf = (sh) => vols.reduce((a, v) => a + ((v && v.voices && v.voices[sh] && v.voices[sh].bytes) || (sh === "Gacrux" && v && !v.voices && v.bytes) || 0), 0);
+  const allMB = [...new Set([...offered, ...vols.flatMap((v) => Object.keys((v && v.voices) || {}))])].reduce((a, sh) => a + bytesOf(sh), 0) * 1.37 / 1048576;
+  const need = offered.filter((sh) => !ready.includes(sh));
   const gk = (g) => g === "FEMALE" ? "여성" : g === "MALE" ? "남성" : "";
-  const vols = AU.vols || [], done = vols.reduce((a, v) => a + ((v && v.passages) || 0), 0), mb = vols.reduce((a, v) => a + ((v && v.bytes) || 0), 0) / 1048576;
-  const vShort = chosen ? chosen.split("-").pop() : "";
-  const stale = chosen && vols.some((v) => v && v.voice && v.voice !== chosen);
-  const rows = list.map((x) => `<div class="au-row${x.voice === chosen ? " on" : ""}">
-      <button class="au-play" type="button" data-adm="auplay" data-v="${esc(x.short)}" aria-label="${esc(x.label || "목소리")} 들어 보기" aria-pressed="${AU.playing === x.short}">${icon(AU.playing === x.short ? "pause" : "play", "i fill")}</button>
-      <div class="au-name"><b>${esc(x.label || gk(x.gender) || "목소리")}</b><small>${esc(x.short || "")}</small></div>
-      ${x.voice === chosen ? `<span class="au-on">${icon("check")}고름</span>` : `<button class="btn ghost small" type="button" data-adm="auvoice" data-v="${esc(x.voice)}">이 목소리로</button>`}</div>`).join("");
+  const rows = list.map((x) => {
+    const sh = x.short, on = offered.includes(sh), isDef = sh === def, b = builtOf(sh);
+    const st = !on ? "" : ready.includes(sh) ? `<span class="au-st ok">${icon("check")}본문 ${total || b}개 준비됨</span>` : b ? `<span class="au-st">만드는 중 · ${b}/${total || "?"}</span>` : `<span class="au-st warn">아직 안 만듦</span>`;
+    return `<div class="au-row${on ? " on" : ""}">
+      <button class="au-play" type="button" data-adm="auplay" data-v="${esc(sh)}" aria-label="${esc(x.label || "목소리")} 들어 보기" aria-pressed="${AU.playing === sh}">${icon(AU.playing === sh ? "pause" : "play", "i fill")}</button>
+      <div class="au-name"><b>${esc(x.label || gk(x.gender) || "목소리")}${isDef ? ' <i class="gb">기본</i>' : ""}</b><small>${esc(sh)}${st ? " · " : ""}${st}</small></div>
+      <div class="au-ctl">${on && !isDef && ready.includes(sh) ? `<button class="btn ghost small" type="button" data-adm="audef" data-v="${esc(x.voice)}">기본으로</button>` : ""}
+        <label class="tg" title="앱에 내놓기"><input type="checkbox" data-auoffer="${esc(x.voice)}" ${on ? "checked" : ""} ${isDef ? "disabled" : ""}><i aria-hidden="true"></i><span>${on ? "앱에" : "끔"}</span></label></div></div>`;
+  }).join("");
   return `<div class="audio-adm">
-    <section class="card-box"><div class="cb-h">${icon("head")}<b>본문 음성</b><em>${done ? `본문 ${done}개 · ${mb.toFixed(1)}MB` : "아직 없음"}</em></div>
-      <p class="muted" style="margin:0">${done ? `<b>${esc(vShort)}</b> 목소리로 1·2·3권 본문을 절마다 읽어 두었어요. 본문 화면 위쪽 <b>[듣기]</b>를 누르면 들려요.` : "목소리를 고른 뒤 아래 순서대로 '본문 전체 만들기'를 한 번 실행해 주세요."}
-        ${stale ? `<br><span class="err">고른 목소리가 바뀌었어요. 아래 순서대로 다시 만들어 주세요 ('이미 만든 본문도 다시 만들기' 체크).</span>` : ""}</p>
-      ${L ? `<p class="muted" style="margin:0">마지막 만들기: ${ago(L.at)} · ${!L.ok ? `<span class="err">실패 — ${esc(L.error || "")}</span>` : L.mode === "build" ? `${L.running ? "만드는 중 · " : ""}새로 ${L.made || 0}개 · 그대로 ${L.skipped || 0}개${L.chars ? ` · ${Math.round(L.chars / 1000)}천 자` : ""}` : `목소리 시안 ${(L.voices || []).length}개`}</p>` : ""}</section>
-    <section class="card-box"><div class="cb-h">${icon("wave")}<b>목소리</b><em>${esc((list[0] && list[0].ref) || "갈라디아서 2:20")}로 들어 보기</em></div>
-      ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요.</p>`}</section>
+    <section class="card-box"><div class="cb-h">${icon("head")}<b>본문 음성</b><em>저장 공간 약 ${Math.round(allMB)}MB / 1,024MB</em></div>
+      <p class="muted" style="margin:0">앱에 내놓은 목소리 <b>${offered.length}개</b> 중 <b>${offered.filter((sh) => ready.includes(sh)).length}개</b>를 지금 앱에서 고를 수 있어요. 각자 설정 → 듣기, 또는 듣기 막대에서 목소리를 바꿔요. 처음엔 <b>${esc(vLabel(def))}</b>(기본)으로 들려요.</p>
+      ${need.length ? `<p class="ok-box warn" style="margin:0"><b>만들어야 할 목소리 ${need.length}개: ${need.map(vLabel).join(", ")}</b>아래 '음성 만드는 순서' 2번을 실행하면 목소리 하나에 30~40분씩 걸려 만들어져요. 다 되면 앱에 저절로 나타나요.</p>` : ""}
+      ${L ? `<p class="muted" style="margin:0">마지막 만들기: ${ago(L.at)} · ${!L.ok ? `<span class="err">실패 — ${esc(L.error || "")}</span>` : L.mode === "build" ? `${L.running ? `만드는 중(${esc(vLabel(L.now || ""))}) · ` : ""}새로 ${L.made || 0}개 · 그대로 ${L.skipped || 0}개${L.chars ? ` · ${Math.round(L.chars / 1000)}천 자` : ""}` : `목소리 시안 ${(L.voices || []).length}개`}</p>` : ""}</section>
+    <section class="card-box"><div class="cb-h">${icon("wave")}<b>목소리</b><em>최대 6개 · 하나에 약 75MB</em></div>
+      ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요.</p>`}
+      <p class="muted" style="margin:0">▶로 ${esc((list[0] && list[0].ref) || "갈라디아서 2:20")}를 들어 보고, 스위치를 켜면 앱에 내놓아요. 끈 목소리의 음성은 다음 만들기 때 지워져요.</p></section>
     <div class="row-btns"><button class="btn ghost small" type="button" data-adm="aureload">${icon("refresh")}새로 읽기</button></div>
     <details class="howto"><summary>음성 만드는 순서</summary>
       <ol>
         <li>github.com/artist4rhythm-hub/amsong → Settings → Secrets and variables → Actions → <b>New repository secret</b> → 이름 <code>AMSONG_TTS_KEY</code>, 값에는 구글 클라우드 <b>amsong-tts</b> 프로젝트의 API 키 (한 번만 · 이미 했어요)</li>
-        <li>저장소 → <b>Actions</b> → 왼쪽 '<b>말씀선포 음성 만들기</b>' → <b>Run workflow</b> → mode <b>build</b>(본문 전체) · 권 <b>1,2,3</b> → 30~40분 뒤 '새로 읽기'</li>
-        <li>본문을 고쳐 다시 올린 뒤에도 같은 방법으로 실행하면, 바뀐 본문만 새로 만들어요. 목소리를 바꿨다면 '이미 만든 본문도 다시 만들기'를 체크해요. (mode <b>sample</b> = 목소리 시안 6개만)</li>
+        <li>저장소 → <b>Actions</b> → 왼쪽 '<b>말씀선포 음성 만들기</b>' → <b>Run workflow</b> → mode <b>build</b> · 권 <b>1,2,3</b> → 앱에 내놓은 목소리 중 아직 없는 것만 만들어요(목소리 하나에 30~40분). 끈 목소리 음성은 이때 지워져요</li>
+        <li>본문을 고쳐 다시 올린 뒤에도 같은 방법으로 실행하면 바뀐 본문만 새로 만들어요. 특정 본문만 다시 만들려면 '이 본문만' 칸에 본문 id(예: v1s1p6). (mode <b>sample</b> = 목소리 시안 6개만)</li>
       </ol>
       <p class="muted">음성은 구글 무료 한도(한 달 100만 자) 안에서 만들어요. 본문과 음성은 GitHub에 남지 않고 이 앱의 Firebase에만 저장돼요.</p></details>
   </div>`;
@@ -2851,6 +2899,15 @@ function admWire(D) {
     if (k === "on") f.closest("label").querySelector("span").textContent = f.checked ? "켜짐" : "꺼짐";
     if (k === "title" || k === "body") { const pv = f.closest(".al").querySelector(".al-prev span"); pv.innerHTML = `<b>${esc(a.title || "말씀선포")}</b>${esc((a.body || "").replace(/\{이름\}/g, S.user.name || "홍길동"))}`; }
   });
+  document.querySelectorAll("[data-auoffer]").forEach((c) => c.addEventListener("change", async () => {
+    const cur = AU.cfg || {}, v = c.dataset.auoffer;
+    let voices = [...new Set([cur.voice, ...(cur.voices || [])].filter(Boolean))];
+    if (c.checked) { if (voices.length >= 6) { c.checked = false; return toast("목소리는 6개까지 내놓을 수 있어요"); } voices.push(v); }
+    else voices = voices.filter((x) => x !== v);
+    try { await B.setConfig("audio", { voices }); audit(c.checked ? "목소리 앱에 내놓음" : "목소리 앱에서 내림", vLabel(vShort(v))); AU.cfg = { ...cur, voices }; S.audioCfg = undefined;
+      toast(c.checked ? "앱에 내놓았어요 · GitHub에서 '음성 만들기'를 실행하면 만들어져요" : "앱에서 내렸어요 · 음성은 다음 만들기 때 지워져요"); viewAdmin(); }
+    catch (e) { c.checked = !c.checked; toast("저장하지 못했어요"); }
+  }));
   const vf = $("vapidForm");
   if (vf) vf.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -2960,8 +3017,9 @@ async function admClick(t) {
     case "lgd": ADM.lg.days = Number(t.dataset.v) || 7; await admLogsLoad(true); viewAdmin(); break;
     case "lgreload": await admLogsLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
     case "lgcsv": lgCsv(D); break;
-    case "auvoice": {
-      try { await B.setConfig("audio", { voice: t.dataset.v }); audit("목소리 정함", t.dataset.v); AU.cfg = { ...(AU.cfg || {}), voice: t.dataset.v }; toast("이 목소리로 정했어요"); viewAdmin(); }
+    case "auvoice": case "audef": {
+      const v = t.dataset.v, cur = AU.cfg || {}, voices = [...new Set([...(cur.voices || []), cur.voice, v].filter(Boolean))];
+      try { await B.setConfig("audio", { voice: v, voices }); audit("기본 목소리 정함", vLabel(vShort(v))); AU.cfg = { ...cur, voice: v, voices }; S.audioCfg = undefined; toast(vLabel(vShort(v)) + "을(를) 기본 목소리로 정했어요"); viewAdmin(); }
       catch (e) { toast("저장하지 못했어요"); }
       break;
     }
@@ -3027,7 +3085,8 @@ document.addEventListener("click", async (e) => {
   }
   if (t.dataset.pref) { setPref(t.dataset.pref, t.dataset.val);
     if (t.dataset.pref === "plRate") { PL.rate = Number(t.dataset.val) || 1; if (PL.audio) PL.audio.playbackRate = PL.rate; }
-    if (t.dataset.pref === "plCont") PL.cont = t.dataset.val === "1"; if (t.dataset.pref === "theme") { closeThemePop(); toast((THEMES.find((x) => x.id === t.dataset.val) || {}).label + "(으)로 바꿨어요"); } applyTheme(); return render(); }
+    if (t.dataset.pref === "plCont") PL.cont = t.dataset.val === "1";
+    if (t.dataset.pref === "plVoice" && PL.open && PL.idx) { const st = S.stages[PL.vol + "_" + PL.num], p = st && st.passages.find((x) => x.id === PL.pid); if (p) plLoad({ vol: PL.vol, num: PL.num, p, st, mode: PL.mode }, PL.i, PL.playing); } if (t.dataset.pref === "theme") { closeThemePop(); toast((THEMES.find((x) => x.id === t.dataset.val) || {}).label + "(으)로 바꿨어요"); } applyTheme(); return render(); }
   switch (t.dataset.act) {
     case "signin":
       try { await B.signIn(); } catch (err) { toast("로그인하지 못했어요: " + (err.code || err.message)); }
@@ -3226,7 +3285,7 @@ async function render() {
 async function boot(user) {
   Object.keys(NOTES).forEach((k) => delete NOTES[k]);
   S.user = user; S.allow = null; S.admin = false; S.super = false; S.userDoc = {}; S.books = {}; S.stages = {}; S.marks = {}; S.weak = null;
-  S.myReq = undefined; S.reqEdit = false; S.pushCfg = undefined; S.myPush = undefined; ADM.data = null; ADM.alarms = null; ADM.sel.clear();
+  S.myReq = undefined; S.audioCfg = undefined; S.reqEdit = false; S.pushCfg = undefined; S.myPush = undefined; ADM.data = null; ADM.alarms = null; ADM.sel.clear();
   if (!user) return render();
   // 열람 허용과 내 기록을 한꺼번에 받아 시작을 빠르게
   const udoc = B.getUserDoc(user.uid).catch(() => null);

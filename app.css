@@ -1595,3 +1595,25 @@ html.pl-mini .desk-main { padding-bottom: calc(76px + env(safe-area-inset-bottom
 #plBar.top .pl-ic { width: 32px; height: 36px; }
 @media (max-width: 1260px) { #plBar.top .pl-chip:not(.rate) span { display: none; } #plBar.top .pl-chip:not(.rate) { width: 34px; padding: 0; } #plBar.top .pl-chip svg { display: block; } }
 @media (max-width: 860px) { #plBar.top .pl-meta { max-width: 130px; } }
+
+/* 목소리 여러 개 (2.6) */
+.pl-chip .sh { display: none; }
+@media (max-width: 460px) { #plBar:not(.top) .pl-chip .lg { display: none; } #plBar:not(.top) .pl-chip .sh { display: inline; } }
+.pl-vsel { position: relative; flex: 0 1 auto !important; padding: 0 6px 0 8px !important; }
+.pl-vsel select { appearance: none; -webkit-appearance: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; font-weight: 600; padding: 0 12px 0 0; max-width: 92px; text-overflow: ellipsis; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: right 4px center, right 0 center; background-size: 4px 4px; background-repeat: no-repeat; }
+.pl-vsel select option { color: #1F2320; }
+#plBar.top .pl-vsel { width: auto !important; padding: 0 8px !important; }
+#plBar.top .pl-vsel svg { display: block; }
+.vo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.vo-grid button { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surf2); color: var(--ink); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.vo-grid button svg { width: 16px; height: 16px; color: var(--sub); flex: none; }
+.vo-grid button[aria-pressed="true"] { border: 2px solid var(--acc); padding: 0 9px; background: var(--band); color: var(--pri); font-weight: 700; }
+.vo-grid button[aria-pressed="true"] svg { color: var(--acc); }
+.au-ctl { display: flex; align-items: center; gap: 6px; }
+.au-st { font-size: 11.5px; color: var(--sub); display: inline-flex; align-items: center; gap: 3px; }
+.au-st svg { width: 13px; height: 13px; }
+.au-st.ok { color: var(--acc); font-weight: 700; }
+.au-st.warn { color: #B45309; }
+.au-name b .gb { font-style: normal; font-size: 11px; font-weight: 700; background: var(--band); color: var(--acc); border-radius: 5px; padding: 1px 6px; margin-left: 4px; vertical-align: 1px; }
+@media (max-width: 460px) { .au-row { grid-template-columns: auto minmax(0, 1fr) !important; } .au-ctl { grid-column: 1 / -1; justify-content: flex-end; } }

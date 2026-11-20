@@ -14,11 +14,15 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "build = 고른 목소리로 본문 전체 음성 만들기 · sample = 목소리 시안 만들기 (갈라디아서 2:20)"
+        description: "build = 본문 전체 음성 · sample = 목소리 시안 (갈라디아서 2:20) · pausetest = 줄바꿈 쉼 길이 시험 (고린도전서 13:1-3)"
         required: true
         default: "build"
         type: choice
-        options: [build, sample]
+        options: [build, sample, pausetest]
+      voice:
+        description: "이 목소리만 (비우면 앱에 내놓은 목소리 전부 · 예: Gacrux 또는 Kore,Charon)"
+        required: false
+        default: ""
       vols:
         description: "만들 권 (예: 1,2,3 또는 3)"
         required: true
@@ -62,6 +66,7 @@ jobs:
           VOLS: ${{ inputs.vols }}
           FORCE: ${{ inputs.force }}
           ONLY: ${{ inputs.only }}
+          ONLYV: ${{ inputs.voice }}
         run: |
           if [ -z "$FIREBASE_SA" ]; then echo "비밀값 AMSONG_FIREBASE_SA 가 없어요"; exit 1; fi
           if [ -z "$TTS_KEY" ]; then echo "비밀값 AMSONG_TTS_KEY 가 아직 없어요 (Settings → Secrets and variables → Actions)"; exit 1; fi
@@ -96,19 +101,27 @@ jobs:
             }
             return `${m[1]} ${m[2]}장 ${m[3]}절` + (m[4] ? `에서 ${m[4]}절` : "");
           }
-          // 책의 한 줄 = 한 호흡: 줄바꿈 대신 쉼표로 이어 읽고 절 끝은 마침표 (줄바꿈을 그대로 보내면 엉뚱한 말이 끼어드는 일이 있었음 · 2.5.1)
+          // 책의 한 줄 = 한 호흡 (2.6.1): 줄바꿈 자리에 구글 쉼 표시 [pause short] 등을 넣어 한 문장으로 이어 읽되 줄마다 숨을 쉼
+          //  - comma = 2.5.1 방식(줄 끝 쉼표) · short / normal / long = 쉼 표시 (amsong_config/audio.pause 로 정함)
+          //  - 줄바꿈 글자를 그대로 보내면 엉뚱한 말이 끼어드는 일이 있었음 (2.5.1)
           const clean = (l) => String(l).replace(/Ⓐ/g, "").replace(/[()（）\[\]「」『』〔〕]/g, "").replace(/\s+/g, " ").trim();
-          const sayLines = (lines) => {
+          const PTAG = { short: " [pause short] ", normal: " [pause] ", long: " [pause long] " };
+          let PAUSE = "comma";
+          const sayLines = (lines, pm = PAUSE) => {
             const a = (lines || []).map(clean).filter(Boolean);
+            const end = (l) => /[.!?…”’"']$/.test(l) ? l : l.replace(/[,;:]$/, "") + ".";
+            if (PTAG[pm]) return a.map((l, i) => i < a.length - 1 ? l : end(l)).join(PTAG[pm]);
             return a.map((l, i) => /[.,!?;:…”’"']$/.test(l) ? l : l + (i < a.length - 1 ? "," : ".")).join(" ");
           };
-          const verseText = (p) => p.verses.map((v) => sayLines(v.lines)).join(" ");
+          const isMarkup = (t) => /\[pause( short| long)?\]/.test(t);
+          const verseText = (p, pm) => p.verses.map((v) => sayLines(v.lines, pm)).join(" ");
           const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
           async function speak(voice, text) {
-            const body = { input: { text }, voice: { languageCode: voice.languageCodes[0], name: voice.name }, audioConfig: { audioEncoding: "MP3", speakingRate: RATE } };
+            const body = { input: isMarkup(text) ? { markup: text } : { text }, voice: { languageCode: voice.languageCodes[0], name: voice.name }, audioConfig: { audioEncoding: "MP3", speakingRate: RATE } };
             for (let t = 0; ; t++) {
               try { return await api("text:synthesize", body); }
               catch (e) {
+                if (body.input.markup && /markup|pause|invalid/i.test(e.message)) { console.log("쉼 표시를 못 써서 쉼표로: " + e.message); body.input = { text: body.input.markup.replace(/\s*\[pause( short| long)?\]\s*/g, ", ") }; continue; }
                 if (/rate|speaking/i.test(e.message) && body.audioConfig.speakingRate) { delete body.audioConfig.speakingRate; continue; } // 빠르기를 못 바꾸는 목소리면 보통 빠르기로
                 if (t < 6 && /quota|exhausted|429|50\d|unavailable|deadline|internal|fetch failed/i.test(e.message)) { await sleep(4000 * (t + 1)); continue; } // 잠깐 막히면 쉬었다가 다시
                 throw e;
@@ -124,7 +137,11 @@ jobs:
           async function build() {
             const cfg = (await db.doc("amsong_config/audio").get()).data() || {};
             if (!cfg.voice) throw new Error("아직 목소리를 고르지 않았어요 (앱 → 관리 → 음성)");
-            const offered = [...new Set([cfg.voice, ...(cfg.voices || [])].filter(Boolean))];
+            const ONLYV = String(process.env.ONLYV || "").split(/[^A-Za-z]+/).filter(Boolean);
+            const offeredAll = [...new Set([cfg.voice, ...(cfg.voices || [])].filter(Boolean))];
+            const offered = offeredAll.filter((v) => !ONLYV.length || ONLYV.includes(v.split("-").pop()));
+            PAUSE = cfg.pause || "comma";
+            console.log("줄바꿈 쉼: " + PAUSE + " · 목소리: " + offered.map((v) => v.split("-").pop()).join(", "));
             const VOLS = String(process.env.VOLS || "1,2,3").split(/[^0-9]+/).filter(Boolean);
             const FORCE = String(process.env.FORCE) === "true";
             const ONLY = String(process.env.ONLY || "").split(/[^A-Za-z0-9]+/).filter(Boolean);
@@ -133,12 +150,12 @@ jobs:
             const t0 = Date.now();
             const stagesOf = {};
             for (const vol of ["1", "2", "3"]) stagesOf[vol] = (await db.collection("amsong_books/" + vol + "/stages").get()).docs.map((d) => d.data()).sort((a, b) => a.num - b.num);
-            const log = (extra) => logRef.set({ last: { mode: MODE, ok: true, at: Date.now(), rate: RATE, voice: cfg.voice, voices: offered.map((v) => v.split("-").pop()), made, skipped, chars, error: "", ...extra } }, { merge: true });
+            const log = (extra) => logRef.set({ last: { mode: MODE, ok: true, at: Date.now(), rate: RATE, pause: PAUSE, voice: cfg.voice, voices: offered.map((v) => v.split("-").pop()), made, skipped, chars, error: "", ...extra } }, { merge: true });
 
             // 앱에서 내린 목소리는 지워서 저장 공간을 비움
             for (const vol of ["1", "2", "3"]) {
               const sum = (await db.doc("amsong_audio/" + vol).get()).data() || {};
-              const gone = Object.keys(sum.voices || {}).filter((sh) => !offered.some((v) => v.endsWith("-" + sh)));
+              const gone = Object.keys(sum.voices || {}).filter((sh) => !offeredAll.some((v) => v.endsWith("-" + sh)));
               for (const sh of gone) {
                 let n = 0;
                 for (const st of stagesOf[vol]) for (const p of st.passages || []) {
@@ -191,7 +208,7 @@ jobs:
               }
               // 세 권 모두 다 만든 목소리만 앱에서 고를 수 있게
               const ready = [];
-              for (const v of offered) {
+              for (const v of offeredAll) {
                 const sh = v.split("-").pop();
                 let ok = true;
                 for (const vol of ["1", "2", "3"]) {
@@ -212,6 +229,29 @@ jobs:
 
           try {
             if (MODE === "build") { await build(); process.exit(0); }
+            const acfg = (await db.doc("amsong_config/audio").get()).data() || {};
+            PAUSE = acfg.pause || "comma";
+            if (MODE === "pausetest") {
+              // 줄바꿈 쉼 길이 시험: 기본 목소리로 고린도전서 13:1-3을 네 가지로 → 관리 → 음성에서 듣고 고르기
+              if (!acfg.voice) throw new Error("기본 목소리가 없어요");
+              const v = { name: acfg.voice, languageCodes: ["ko-KR"] };
+              const st = (await db.doc("amsong_books/1/stages/1").get()).data();
+              const p = st && (st.passages || []).find((x) => /^고린도전서 13/.test(x.ref));
+              if (!p) throw new Error("1권 1단계에서 고린도전서 13장을 찾지 못했어요");
+              const vs = p.verses.slice(0, 3), ref = "고린도전서 13:" + vs[0].n + "-" + vs[vs.length - 1].n;
+              const PT = [["comma", "지금 방식 · 줄 끝 쉼표", 1], ["short", "짧게 쉼", 2], ["normal", "보통 쉼", 3], ["long", "길게 쉼", 4]];
+              let chars = 0;
+              for (const [pm, label, order] of PT) {
+                const text = vs.map((x) => sayLines(x.lines, pm)).join(" ");
+                const r = await speak(v, text);
+                chars += text.length;
+                await db.doc("amsong_audio_samples/pt_" + pm).set({ test: true, pause: pm, order, short: "pt_" + pm, label, voice: acfg.voice, ref, rate: RATE, b64: r.audioContent, bytes: Math.round(r.audioContent.length * 0.75), at: FV.serverTimestamp() });
+                console.log("만듦: " + label + " · " + Math.round(r.audioContent.length * 0.75 / 1024) + "KB");
+              }
+              await logRef.set({ last: { mode: MODE, ok: true, at: Date.now(), rate: RATE, chars, error: "" } }, { merge: true });
+              console.log("쉼 시험 4개 완료 · 앱 → 관리 → 음성 에서 들어 보세요");
+              process.exit(0);
+            }
             if (MODE !== "sample") throw new Error("아직 준비 중인 방식이에요: " + MODE);
             const { voices = [] } = await api("voices?languageCode=ko-KR");
             const chirp = voices.filter((v) => /Chirp3-HD/.test(v.name));
@@ -234,7 +274,7 @@ jobs:
               done.push(s); console.log("만듦: " + v.name + " · " + Math.round(r.audioContent.length * 0.75 / 1024) + "KB");
             }
             const old = await db.collection("amsong_audio_samples").get();
-            for (const d of old.docs) if (!done.includes(d.id)) await d.ref.delete();
+            for (const d of old.docs) if (!done.includes(d.id) && !(d.data() || {}).test) await d.ref.delete();
             await logRef.set({ last: { mode: MODE, ok: true, at: Date.now(), rate: RATE, voices: done, chars: text.length * done.length, error: "" } }, { merge: true });
             console.log("목소리 시안 " + done.length + "개 완료 · 앱 → 관리 → 음성 에서 들어 보세요");
           } catch (e) {

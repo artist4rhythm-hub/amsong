@@ -2,7 +2,7 @@
 import * as B from "./backend.js";
 
 const $app = document.getElementById("app");
-const VERSION = "2.6.0";
+const VERSION = "2.6.1";
 const VERSION_DATE = "2026.11.19";
 const VOLS = ["1", "2", "3"];
 const VOL_NAME = { "1": "제1권", "2": "제2권", "3": "제3권 · 성벽기도" };
@@ -2790,7 +2790,8 @@ async function admAudioLoad(force) {
   AU.total = bs.reduce((a, b) => a + ((b && b.stages) || []).reduce((x, st) => x + (st.count || 0), 0), 0);
 }
 function admAudio() {
-  const list = (AU.samples || []).slice().sort((a, b) => (a.gender || "").localeCompare(b.gender || "") || (a.short || "").localeCompare(b.short || ""));
+  const tests = (AU.samples || []).filter((x) => x.test).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const list = (AU.samples || []).filter((x) => !x.test).sort((a, b) => (a.gender || "").localeCompare(b.gender || "") || (a.short || "").localeCompare(b.short || ""));
   const cfg = AU.cfg || {}, def = vShort(cfg.voice), L = (AU.log && AU.log.last) || null;
   const offered = [...new Set([def, ...(cfg.voices || []).map(vShort)].filter(Boolean))], ready = cfg.ready || (def ? [def] : []);
   const vols = AU.vols || [], total = AU.total || 0;
@@ -2813,6 +2814,13 @@ function admAudio() {
       <p class="muted" style="margin:0">앱에 내놓은 목소리 <b>${offered.length}개</b> 중 <b>${offered.filter((sh) => ready.includes(sh)).length}개</b>를 지금 앱에서 고를 수 있어요. 각자 설정 → 듣기, 또는 듣기 막대에서 목소리를 바꿔요. 처음엔 <b>${esc(vLabel(def))}</b>(기본)으로 들려요.</p>
       ${need.length ? `<p class="ok-box warn" style="margin:0"><b>만들어야 할 목소리 ${need.length}개: ${need.map(vLabel).join(", ")}</b>아래 '음성 만드는 순서' 2번을 실행하면 목소리 하나에 30~40분씩 걸려 만들어져요. 다 되면 앱에 저절로 나타나요.</p>` : ""}
       ${L ? `<p class="muted" style="margin:0">마지막 만들기: ${ago(L.at)} · ${!L.ok ? `<span class="err">실패 — ${esc(L.error || "")}</span>` : L.mode === "build" ? `${L.running ? `만드는 중(${esc(vLabel(L.now || ""))}) · ` : ""}새로 ${L.made || 0}개 · 그대로 ${L.skipped || 0}개${L.chars ? ` · ${Math.round(L.chars / 1000)}천 자` : ""}` : `목소리 시안 ${(L.voices || []).length}개`}</p>` : ""}</section>
+    <section class="card-box"><div class="cb-h">${icon("list")}<b>끊어 읽기 (줄바꿈 = 호흡)</b><em>지금: ${esc(({ comma: "줄 끝 쉼표", short: "짧게 쉼", normal: "보통 쉼", long: "길게 쉼" })[cfg.pause || "comma"])}</em></div>
+      <p class="muted" style="margin:0">책자의 줄바꿈마다 숨을 쉬듯 잠깐 쉬고, 한 문장으로 자연스럽게 이어 읽어요. ${tests.length ? `${esc((tests[0] && tests[0].ref) || "고린도전서 13:1-3")}을 들어 보고 고르세요.` : "아직 시험 음성이 없어요."}</p>
+      ${tests.length ? `<div class="au-list">${tests.map((x) => { const on = (cfg.pause || "comma") === x.pause; return `<div class="au-row${on ? " on" : ""}">
+        <button class="au-play" type="button" data-adm="auplay" data-v="${esc(x.short)}" aria-label="${esc(x.label)} 들어 보기" aria-pressed="${AU.playing === x.short}">${icon(AU.playing === x.short ? "pause" : "play", "i fill")}</button>
+        <div class="au-name"><b>${esc(x.label)}</b><small>${esc(vLabel(vShort(x.voice)))}</small></div>
+        <div class="au-ctl">${on ? `<span class="au-on">${icon("check")}고름</span>` : `<button class="btn ghost small" type="button" data-adm="aupause" data-v="${esc(x.pause)}">이 방식으로</button>`}</div></div>`; }).join("")}</div>
+      <p class="muted" style="margin:0">방식을 바꾸면 '음성 만드는 순서' 2번을 실행할 때 목소리마다 다시 만들어요 (목소리 하나에 약 15만 자 · 30~40분).</p>` : ""}</section>
     <section class="card-box"><div class="cb-h">${icon("wave")}<b>목소리</b><em>최대 6개 · 하나에 약 75MB</em></div>
       ${rows ? `<div class="au-list">${rows}</div>` : `<p class="muted">아직 목소리 시안이 없어요.</p>`}
       <p class="muted" style="margin:0">▶로 ${esc((list[0] && list[0].ref) || "갈라디아서 2:20")}를 들어 보고, 스위치를 켜면 앱에 내놓아요. 끈 목소리의 음성은 다음 만들기 때 지워져요.</p></section>
@@ -3017,6 +3025,12 @@ async function admClick(t) {
     case "lgd": ADM.lg.days = Number(t.dataset.v) || 7; await admLogsLoad(true); viewAdmin(); break;
     case "lgreload": await admLogsLoad(true); viewAdmin(); toast("새로 읽었어요"); break;
     case "lgcsv": lgCsv(D); break;
+    case "aupause": {
+      const v = t.dataset.v;
+      try { await B.setConfig("audio", { pause: v }); audit("끊어 읽기 방식 정함", v); AU.cfg = { ...(AU.cfg || {}), pause: v }; toast("끊어 읽기 방식을 정했어요 · GitHub에서 '음성 만들기'를 실행하면 반영돼요"); viewAdmin(); }
+      catch (e) { toast("저장하지 못했어요"); }
+      break;
+    }
     case "auvoice": case "audef": {
       const v = t.dataset.v, cur = AU.cfg || {}, voices = [...new Set([...(cur.voices || []), cur.voice, v].filter(Boolean))];
       try { await B.setConfig("audio", { voice: v, voices }); audit("기본 목소리 정함", vLabel(vShort(v))); AU.cfg = { ...cur, voice: v, voices }; S.audioCfg = undefined; toast(vLabel(vShort(v)) + "을(를) 기본 목소리로 정했어요"); viewAdmin(); }

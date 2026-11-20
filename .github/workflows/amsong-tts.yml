@@ -1,5 +1,5 @@
 # 말씀선포 음성 만들기 — 구글 TTS(Chirp 3 HD)로 말씀을 읽은 음성을 만들어 Firebase(amsong-99f03)에 넣습니다.
-# 손으로 누를 때만 실행됩니다: GitHub 저장소 → Actions → '말씀선포 음성 만들기' → Run workflow
+# 손으로 누를 때: GitHub 저장소 → Actions → '말씀선포 음성 만들기' → Run workflow · 그리고 매달 1일 오전 10시에 저절로 build(바뀐 것만)
 #   build  = 관리 → 음성에서 앱에 내놓은 목소리마다 본문별 · 절별 음성 → amsong_audio/{권}/passages/{본문id[@목소리]}(목록) · {…}_{번호}(0 = 본문 주소, 1~ = 절)
 #            앱에서 내린 목소리의 음성은 지움 · 세 권 다 만든 목소리만 amsong_config/audio.ready 에 넣어 앱에서 고를 수 있게 함
 #            이미 같은 글·목소리·빠르기로 만든 본문은 건너뜀 (본문을 고쳐 올린 뒤 다시 돌리면 바뀐 본문만 새로 만듦)
@@ -11,6 +11,9 @@
 name: 말씀선포 음성 만들기
 
 on:
+  # 매달 1일 오전 10시(한국): 구글 무료 한도가 새로 차는 날, 바뀐 것만 다시 만들기 (같은 글·목소리·쉼이면 건너뜀 → 할 일 없으면 글자 0)
+  schedule:
+    - cron: "0 1 1 * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -61,10 +64,10 @@ jobs:
         env:
           FIREBASE_SA: ${{ secrets.AMSONG_FIREBASE_SA }}
           TTS_KEY: ${{ secrets.AMSONG_TTS_KEY }}
-          MODE: ${{ inputs.mode }}
-          RATE: ${{ inputs.rate }}
-          VOLS: ${{ inputs.vols }}
-          FORCE: ${{ inputs.force }}
+          MODE: ${{ inputs.mode || 'build' }}
+          RATE: ${{ inputs.rate || '0.95' }}
+          VOLS: ${{ inputs.vols || '1,2,3' }}
+          FORCE: ${{ inputs.force || false }}
           ONLY: ${{ inputs.only }}
           ONLYV: ${{ inputs.voice }}
         run: |
